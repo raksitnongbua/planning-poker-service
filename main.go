@@ -33,12 +33,12 @@ type GuestSignInResponse struct {
 }
 
 type User struct {
-	ID   string
-	Name string
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 type Room struct {
-	Name    string
-	Members []User
+	Name    string `json:"name"`
+	Members []User `json:"members"`
 }
 type MessageAction struct {
 	Action  string      `json:"action"`
