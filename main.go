@@ -28,15 +28,17 @@ type GuestSignInResponse struct {
 	UID string `json:"uuid"`
 }
 
-type User struct {
+type Member struct {
 	ID             string  `json:"id"`
 	Name           string  `json:"name"`
 	LastActiveAt   string  `json:"last_active_at"`
 	EstimatedPoint float32 `json:"estimated_point"`
 }
 type Room struct {
-	Name    string `json:"name"`
-	Members []User `json:"members"`
+	Name     string   `json:"name"`
+	Members  []Member `json:"members"`
+	Status   string   `json:"status"`
+	AvgPoint float32  `json:"avg_point"`
 }
 type MessageAction struct {
 	Action  string      `json:"action"`
@@ -62,7 +64,7 @@ func healthCheckHandler(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).SendString("Healthy")
 }
 
-func findMemberIndex(members []User, targetId string) int {
+func findMemberIndex(members []Member, targetId string) int {
 	for i, user := range members {
 		if user.ID == targetId {
 			return i
@@ -107,7 +109,7 @@ func createNewRoomHandler(c *fiber.Ctx) error {
 	}
 
 	roomID := generateUniqueRoomID()
-	rooms[roomID] = Room{Name: request.RoomName}
+	rooms[roomID] = Room{Name: request.RoomName, Status: "VOTING"}
 
 	fmt.Printf("Room created: %s (%s)\n", request.RoomName, roomID)
 
@@ -156,7 +158,7 @@ func roomExists(roomId string) bool {
 	return exists
 }
 
-func foundUser(uid string, members []User) bool {
+func foundUser(uid string, members []Member) bool {
 	found := false
 	for _, user := range members {
 		if user.ID == uid {
@@ -188,7 +190,7 @@ func joinRoom(payload interface{}, uid string, room *Room) bool {
 		return false
 	}
 	name := joinRoomData.Name
-	room.Members = append(room.Members, User{
+	room.Members = append(room.Members, Member{
 		ID: uid, Name: name, LastActiveAt: time.Now().Format(time.RFC3339), EstimatedPoint: -1})
 
 	return true
@@ -219,6 +221,19 @@ func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
 	room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
 
 	return true
+}
+func calculateAverageScore(scores []float32) float32 {
+	var totalScore float32
+
+	for _, score := range scores {
+		totalScore += score
+	}
+
+	if len(scores) > 0 {
+		return totalScore / float32(len(scores))
+	}
+
+	return 0.0
 }
 
 func handleRoomSocket(c *websocket.Conn) {
@@ -294,7 +309,6 @@ func handleRoomSocket(c *websocket.Conn) {
 			} else {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
-
 		case "UPDATE_ESTIMATED_POINT":
 			if foundUser(uid, rooms[roomId].Members) {
 				room := rooms[roomId]
@@ -309,8 +323,29 @@ func handleRoomSocket(c *websocket.Conn) {
 			} else {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
-		}
+		case "REVEAL_CARDS":
+			room := rooms[roomId]
+			room.Status = "REVEALED_CARDS"
+			scores := []float32{}
+			for _, member := range room.Members {
+				if member.EstimatedPoint != -1 {
+					scores = append(scores, member.EstimatedPoint)
+				}
+			}
+			room.AvgPoint = calculateAverageScore(scores)
+			rooms[roomId] = room
+			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
+		case "RESET_ROOM":
+			room := rooms[roomId]
+			for index := range room.Members {
+				room.Members[index].EstimatedPoint = -1
+			}
+			room.Status = "VOTING"
+			room.AvgPoint = 0
+			rooms[roomId] = room
 
+			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
+		}
 	}
 }
 
