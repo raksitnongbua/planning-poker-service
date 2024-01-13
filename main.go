@@ -222,6 +222,17 @@ func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
 
 	return true
 }
+
+func getAveragePoint(room *Room) float32 {
+	scores := []float32{}
+	for _, member := range room.Members {
+		if member.EstimatedPoint != -1 {
+			scores = append(scores, member.EstimatedPoint)
+		}
+	}
+	return calculateAverageScore(scores)
+}
+
 func calculateAverageScore(scores []float32) float32 {
 	var totalScore float32
 
@@ -315,6 +326,7 @@ func handleRoomSocket(c *websocket.Conn) {
 				index := findMemberIndex(room.Members, uid)
 
 				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &room) {
+					room.AvgPoint = getAveragePoint(&room)
 					rooms[roomId] = room
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 				} else {
@@ -326,13 +338,6 @@ func handleRoomSocket(c *websocket.Conn) {
 		case "REVEAL_CARDS":
 			room := rooms[roomId]
 			room.Status = "REVEALED_CARDS"
-			scores := []float32{}
-			for _, member := range room.Members {
-				if member.EstimatedPoint != -1 {
-					scores = append(scores, member.EstimatedPoint)
-				}
-			}
-			room.AvgPoint = calculateAverageScore(scores)
 			rooms[roomId] = room
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 		case "RESET_ROOM":
