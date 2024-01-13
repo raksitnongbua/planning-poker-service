@@ -16,10 +16,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func healthCheckHandler(c *fiber.Ctx) error {
-	return c.Status(http.StatusOK).SendString("Healthy")
-}
-
 type RoomRequest struct {
 	RoomName  string `json:"room_name"`
 	HostingID string `json:"hosting_id"`
@@ -33,8 +29,10 @@ type GuestSignInResponse struct {
 }
 
 type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	LastActiveAt   string  `json:"last_active_at"`
+	EstimatedPoint float32 `json:"estimated_point"`
 }
 type Room struct {
 	Name    string `json:"name"`
@@ -49,11 +47,29 @@ type JoinRoomPayload struct {
 	Name string `json:"name"`
 }
 
+type EstimatedPointPayload struct {
+	Point float32 `json:"point"`
+}
+
 var (
 	clients   = make(map[*websocket.Conn]bool)
 	clientsMu sync.Mutex
-	rooms     = make(map[string]Room)
+	//TODO: sync with database for solved problems serverless when inactivated state
+	rooms = make(map[string]Room)
 )
+
+func healthCheckHandler(c *fiber.Ctx) error {
+	return c.Status(http.StatusOK).SendString("Healthy")
+}
+
+func findMemberIndex(members []User, targetId string) int {
+	for i, user := range members {
+		if user.ID == targetId {
+			return i
+		}
+	}
+	return -1
+}
 
 func generateUniqueRoomID() string {
 	randomString := generateRandomString(5)
@@ -150,10 +166,12 @@ func foundUser(uid string, members []User) bool {
 	}
 	return found
 }
+
 func joinRoom(payload interface{}, uid string, room *Room) bool {
+
 	joinRoomPayload, ok := payload.(map[string]interface{})
 	if !ok {
-		fmt.Println("Invalid payload format for REGISTER action.")
+		fmt.Println("Invalid payload format for JOIN_ROOM action.")
 		return false
 	}
 
@@ -169,26 +187,37 @@ func joinRoom(payload interface{}, uid string, room *Room) bool {
 		fmt.Println("Error unmarshaling payload:", err)
 		return false
 	}
-
 	name := joinRoomData.Name
-	room.Members = append(room.Members, User{ID: uid, Name: name})
+	room.Members = append(room.Members, User{
+		ID: uid, Name: name, LastActiveAt: time.Now().Format(time.RFC3339), EstimatedPoint: -1})
 
 	return true
 }
 
-func leaveRoom(uid string, roomId string) bool {
-	var filteredMembers []User
-	for _, user := range rooms[roomId].Members {
-		if user.ID != uid {
-			filteredMembers = append(filteredMembers, user)
-		}
+func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
+	updatePointPayload, ok := payload.(map[string]interface{})
+	if !ok {
+		fmt.Println("Invalid payload format for UPDATE_POINT action.")
+		return false
 	}
 
-	room := rooms[roomId]
-	room.Members = filteredMembers
-	rooms[roomId] = room
+	var updatePointData EstimatedPointPayload
+	payloadBytes, err := json.Marshal(updatePointPayload)
+	if err != nil {
+		fmt.Println("Error marshaling payload:", err)
+		return false
+	}
 
-	log.Printf("(%s) leaved room(%s) %s", uid, roomId, filteredMembers)
+	err = json.Unmarshal(payloadBytes, &updatePointData)
+	if err != nil {
+		fmt.Println("Error unmarshaling payload:", err)
+		return false
+	}
+
+	point := updatePointData.Point
+	room.Members[index].EstimatedPoint = point
+	room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
+
 	return true
 }
 
@@ -196,7 +225,7 @@ func handleRoomSocket(c *websocket.Conn) {
 	roomId := c.Params("id")
 
 	if !roomExists(roomId) {
-		c.WriteJSON("Room not found")
+		c.WriteJSON(fiber.Map{"error": "Room not found"})
 		log.Printf("Room with ID %s not found", roomId)
 		c.Close()
 		return
@@ -204,7 +233,7 @@ func handleRoomSocket(c *websocket.Conn) {
 	uid := c.Params("uid")
 
 	c.Locals("roomId", roomId)
-	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: rooms[roomId]})
+
 	clientsMu.Lock()
 	clients[c] = true
 	clientsMu.Unlock()
@@ -213,16 +242,13 @@ func handleRoomSocket(c *websocket.Conn) {
 		clientsMu.Lock()
 		delete(clients, c)
 		clientsMu.Unlock()
-		if foundUser(uid, rooms[roomId].Members) {
-			leaveRoom(uid, roomId)
-		} else {
-			log.Printf("user unregistered leaved room(%s)", roomId)
-		}
+
 		_ = c.Close()
 	}()
 
+	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: rooms[roomId]})
 	if !foundUser(uid, rooms[roomId].Members) {
-		c.WriteJSON(fiber.Map{"action": "NEED_TO_JOIN"})
+		c.WriteJSON(MessageAction{Action: "NEED_TO_JOIN"})
 	}
 
 	var (
@@ -248,11 +274,40 @@ func handleRoomSocket(c *websocket.Conn) {
 
 			if !foundUser(uid, rooms[roomId].Members) && joinRoom(receivedMessage.Payload, uid, &room) {
 				rooms[roomId] = room
-				c.WriteJSON(room)
-
 				broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 			} else {
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
+			}
+		case "UPDATE_ACTIVE_USER":
+			if foundUser(uid, rooms[roomId].Members) {
+				room := rooms[roomId]
+				index := findMemberIndex(room.Members, uid)
+
+				if index != -1 {
+					room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
+					rooms[roomId] = room
+
+					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
+				} else {
+					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+				}
+			} else {
+				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+			}
+
+		case "UPDATE_ESTIMATED_POINT":
+			if foundUser(uid, rooms[roomId].Members) {
+				room := rooms[roomId]
+				index := findMemberIndex(room.Members, uid)
+
+				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &room) {
+					rooms[roomId] = room
+					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
+				} else {
+					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+				}
+			} else {
+				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		}
 
