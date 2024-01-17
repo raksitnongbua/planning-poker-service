@@ -1,19 +1,25 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"google.golang.org/api/option"
 )
 
 type RoomRequest struct {
@@ -57,7 +63,8 @@ var (
 	clients   = make(map[*websocket.Conn]bool)
 	clientsMu sync.Mutex
 	//TODO: sync with database for solved problems serverless when inactivated state
-	rooms = make(map[string]Room)
+	clientFirestore *firestore.Client
+	roomsColRef     *firestore.CollectionRef
 )
 
 func healthCheckHandler(c *fiber.Ctx) error {
@@ -97,6 +104,11 @@ func generateUUID() string {
 
 	return strings.Join([]string{randomString, uuid, timestamp}, "-")
 }
+func getRoomDocRef(roomId string) *firestore.DocumentRef {
+	colRef := clientFirestore.Collection("rooms")
+	docRef := colRef.Doc(roomId)
+	return docRef
+}
 
 func createNewRoomHandler(c *fiber.Ctx) error {
 	var request RoomRequest
@@ -109,7 +121,9 @@ func createNewRoomHandler(c *fiber.Ctx) error {
 	}
 
 	roomID := generateUniqueRoomID()
-	rooms[roomID] = Room{Name: request.RoomName, Status: "VOTING"}
+
+	docRef := roomsColRef.Doc(roomID)
+	docRef.Set(context.TODO(), Room{Name: request.RoomName, Status: "VOTING"})
 
 	fmt.Printf("Room created: %s (%s)\n", request.RoomName, roomID)
 
@@ -149,13 +163,21 @@ func broadcastMessage(roomId string, message any) {
 }
 
 func broadcastRoomInfo(roomId string) {
-	broadcastMessage(roomId, rooms[roomId])
+	docRef := roomsColRef.Doc(roomId)
+	roomInfo, err := docRef.Get(context.Background())
+	if err != nil {
+		log.Printf("Error sending message to client: %v", err)
+	}
+	broadcastMessage(roomId, roomInfo)
 }
 
 func roomExists(roomId string) bool {
-	room, exists := rooms[roomId]
-	log.Println(room)
-	return exists
+	docRef := roomsColRef.Doc(roomId)
+	_, err := docRef.Get(context.TODO())
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 func foundUser(uid string, members []Member) bool {
@@ -271,9 +293,10 @@ func handleRoomSocket(c *websocket.Conn) {
 
 		_ = c.Close()
 	}()
+	roomInfo := getRoomInfo(roomId)
 
-	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: rooms[roomId]})
-	if !foundUser(uid, rooms[roomId].Members) {
+	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
+	if !foundUser(uid, roomInfo.Members) {
 		c.WriteJSON(MessageAction{Action: "NEED_TO_JOIN"})
 	}
 
@@ -293,26 +316,26 @@ func handleRoomSocket(c *websocket.Conn) {
 			log.Println("json unmarshal:", err)
 			break
 		}
+		room := getRoomInfo(roomId)
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
-			room := rooms[roomId]
 
-			if !foundUser(uid, rooms[roomId].Members) && joinRoom(receivedMessage.Payload, uid, &room) {
-				rooms[roomId] = room
+			if !foundUser(uid, room.Members) && joinRoom(receivedMessage.Payload, uid, &room) {
+				docRef := roomsColRef.Doc(roomId)
+				docRef.Set(context.TODO(), room)
 				broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 			} else {
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
 			}
 		case "UPDATE_ACTIVE_USER":
-			if foundUser(uid, rooms[roomId].Members) {
-				room := rooms[roomId]
+			if foundUser(uid, room.Members) {
 				index := findMemberIndex(room.Members, uid)
 
 				if index != -1 {
 					room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
-					rooms[roomId] = room
-
+					docRef := roomsColRef.Doc(roomId)
+					docRef.Set(context.TODO(), room)
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 				} else {
 					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
@@ -321,13 +344,13 @@ func handleRoomSocket(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "UPDATE_ESTIMATED_POINT":
-			if foundUser(uid, rooms[roomId].Members) {
-				room := rooms[roomId]
+			if foundUser(uid, room.Members) {
 				index := findMemberIndex(room.Members, uid)
 
 				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &room) {
 					room.AvgPoint = getAveragePoint(&room)
-					rooms[roomId] = room
+					docRef := roomsColRef.Doc(roomId)
+					docRef.Set(context.TODO(), room)
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 				} else {
 					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
@@ -336,25 +359,54 @@ func handleRoomSocket(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
-			room := rooms[roomId]
 			room.Status = "REVEALED_CARDS"
-			rooms[roomId] = room
+			docRef := roomsColRef.Doc(roomId)
+			//TODO: refactor use update instead set.
+			docRef.Set(context.TODO(), room)
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 		case "RESET_ROOM":
-			room := rooms[roomId]
 			for index := range room.Members {
 				room.Members[index].EstimatedPoint = -1
 			}
 			room.Status = "VOTING"
 			room.AvgPoint = 0
-			rooms[roomId] = room
-
+			docRef := roomsColRef.Doc(roomId)
+			//TODO: refactor use update instead set.
+			docRef.Set(context.TODO(), room)
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 		}
 	}
 }
 
+func getRoomInfo(roomId string) Room {
+	docRef := roomsColRef.Doc(roomId)
+	docSnapshot, err := docRef.Get(context.TODO())
+	if err != nil {
+		log.Fatalf("Failed to get document: %v", err)
+	}
+	var roomInfo Room
+	if err := docSnapshot.DataTo(&roomInfo); err != nil {
+		log.Fatalf("Failed to map Firestore document data: %v", err)
+	}
+	return roomInfo
+}
+
 func main() {
+	//TODO: move database firestore connection to new files
+	godotenv.Load(".env")
+
+	firebaseCredentials := os.Getenv("FIREBASE_CREDENTIALS")
+	opt := option.WithCredentialsJSON([]byte(firebaseCredentials))
+
+	client, err := firebase.NewApp(context.Background(), nil, opt)
+	if err != nil {
+		log.Fatalf("error initializing app: %v", err)
+	}
+
+	firestore, err := client.Firestore(context.TODO())
+	clientFirestore = firestore
+	roomsColRef = clientFirestore.Collection("rooms")
+
 	app := fiber.New()
 	app.Use(cors.New())
 	app.Get("/health", healthCheckHandler)
