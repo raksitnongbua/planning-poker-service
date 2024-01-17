@@ -41,10 +41,12 @@ type Member struct {
 	EstimatedPoint float32 `json:"estimated_point"`
 }
 type Room struct {
-	Name     string   `json:"name"`
-	Members  []Member `json:"members"`
-	Status   string   `json:"status"`
-	AvgPoint float32  `json:"avg_point"`
+	Name      string   `json:"name"`
+	Members   []Member `json:"members"`
+	Status    string   `json:"status"`
+	AvgPoint  float32  `json:"avg_point"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 type MessageAction struct {
 	Action  string      `json:"action"`
@@ -110,6 +112,10 @@ func getRoomDocRef(roomId string) *firestore.DocumentRef {
 	return docRef
 }
 
+func getTimeNow() string {
+	return time.Now().Format(time.RFC3339)
+}
+
 func createNewRoomHandler(c *fiber.Ctx) error {
 	var request RoomRequest
 
@@ -121,13 +127,14 @@ func createNewRoomHandler(c *fiber.Ctx) error {
 	}
 
 	roomID := generateUniqueRoomID()
+	room := Room{Name: request.RoomName, Status: "VOTING", CreatedAt: getTimeNow(), UpdatedAt: getTimeNow()}
 
 	docRef := roomsColRef.Doc(roomID)
-	docRef.Set(context.TODO(), Room{Name: request.RoomName, Status: "VOTING"})
+	docRef.Set(context.TODO(), room)
 
 	fmt.Printf("Room created: %s (%s)\n", request.RoomName, roomID)
 
-	createdAt := time.Now().Format(time.RFC3339)
+	createdAt := getTimeNow()
 
 	return c.JSON(RoomResponse{
 		RoomID:    roomID,
@@ -213,7 +220,7 @@ func joinRoom(payload interface{}, uid string, room *Room) bool {
 	}
 	name := joinRoomData.Name
 	room.Members = append(room.Members, Member{
-		ID: uid, Name: name, LastActiveAt: time.Now().Format(time.RFC3339), EstimatedPoint: -1})
+		ID: uid, Name: name, LastActiveAt: getTimeNow(), EstimatedPoint: -1})
 
 	return true
 }
@@ -240,7 +247,7 @@ func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
 
 	point := updatePointData.Point
 	room.Members[index].EstimatedPoint = point
-	room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
+	room.Members[index].LastActiveAt = getTimeNow()
 
 	return true
 }
@@ -322,6 +329,7 @@ func handleRoomSocket(c *websocket.Conn) {
 		case "JOIN_ROOM":
 
 			if !foundUser(uid, room.Members) && joinRoom(receivedMessage.Payload, uid, &room) {
+				room.UpdatedAt = getTimeNow()
 				docRef := roomsColRef.Doc(roomId)
 				docRef.Set(context.TODO(), room)
 				broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
@@ -333,7 +341,7 @@ func handleRoomSocket(c *websocket.Conn) {
 				index := findMemberIndex(room.Members, uid)
 
 				if index != -1 {
-					room.Members[index].LastActiveAt = time.Now().Format(time.RFC3339)
+					room.Members[index].LastActiveAt = getTimeNow()
 					docRef := roomsColRef.Doc(roomId)
 					docRef.Set(context.TODO(), room)
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
@@ -349,6 +357,7 @@ func handleRoomSocket(c *websocket.Conn) {
 
 				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &room) {
 					room.AvgPoint = getAveragePoint(&room)
+					room.UpdatedAt = getTimeNow()
 					docRef := roomsColRef.Doc(roomId)
 					docRef.Set(context.TODO(), room)
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
@@ -360,6 +369,7 @@ func handleRoomSocket(c *websocket.Conn) {
 			}
 		case "REVEAL_CARDS":
 			room.Status = "REVEALED_CARDS"
+			room.UpdatedAt = getTimeNow()
 			docRef := roomsColRef.Doc(roomId)
 			//TODO: refactor use update instead set.
 			docRef.Set(context.TODO(), room)
@@ -369,6 +379,7 @@ func handleRoomSocket(c *websocket.Conn) {
 				room.Members[index].EstimatedPoint = -1
 			}
 			room.Status = "VOTING"
+			room.UpdatedAt = getTimeNow()
 			room.AvgPoint = 0
 			docRef := roomsColRef.Doc(roomId)
 			//TODO: refactor use update instead set.
