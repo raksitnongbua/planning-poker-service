@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ type Room struct {
 	AvgPoint  float32  `json:"avg_point"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
+	MemberIDs []string `json:"member_ids"`
 }
 type MessageAction struct {
 	Action  string      `json:"action"`
@@ -221,6 +223,7 @@ func joinRoom(payload interface{}, uid string, room *Room) bool {
 	name := joinRoomData.Name
 	room.Members = append(room.Members, Member{
 		ID: uid, Name: name, LastActiveAt: getTimeNow(), EstimatedPoint: -1})
+	room.MemberIDs = append(room.MemberIDs, uid)
 
 	return true
 }
@@ -327,7 +330,6 @@ func handleRoomSocket(c *websocket.Conn) {
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
-
 			if !foundUser(uid, room.Members) && joinRoom(receivedMessage.Payload, uid, &room) {
 				room.UpdatedAt = getTimeNow()
 				docRef := roomsColRef.Doc(roomId)
@@ -368,12 +370,18 @@ func handleRoomSocket(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
-			room.Status = "REVEALED_CARDS"
+			if foundUser(uid, room.Members) {
+				index := findMemberIndex(room.Members, uid)
+				if index != -1 {
+					room.Members[index].LastActiveAt = getTimeNow()
+				}
+			}
 			room.UpdatedAt = getTimeNow()
+			room.Status = "REVEALED_CARDS"
 			docRef := roomsColRef.Doc(roomId)
-			//TODO: refactor use update instead set.
 			docRef.Set(context.TODO(), room)
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
+
 		case "RESET_ROOM":
 			for index := range room.Members {
 				room.Members[index].EstimatedPoint = -1
@@ -382,8 +390,12 @@ func handleRoomSocket(c *websocket.Conn) {
 			room.UpdatedAt = getTimeNow()
 			room.AvgPoint = 0
 			docRef := roomsColRef.Doc(roomId)
-			//TODO: refactor use update instead set.
-			docRef.Set(context.TODO(), room)
+
+			docRef.Update(context.TODO(), []firestore.Update{
+				{Path: "Status", Value: room.Status},
+				{Path: "UpdatedAt", Value: room.UpdatedAt},
+				{Path: "AvgPoint", Value: room.AvgPoint}})
+
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 		}
 	}
@@ -400,6 +412,45 @@ func getRoomInfo(roomId string) Room {
 		log.Fatalf("Failed to map Firestore document data: %v", err)
 	}
 	return roomInfo
+}
+
+func structToMap(obj interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	val := reflect.ValueOf(obj)
+	typ := reflect.TypeOf(obj)
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		tag := typ.Field(i).Tag.Get("json")
+		result[tag] = field.Interface()
+	}
+
+	return result
+}
+
+func handleGetRecentRooms(c *fiber.Ctx) error {
+	id := c.Params("id")
+	query := roomsColRef.Where("MemberIDs", "array-contains", id).OrderBy("UpdatedAt", firestore.Desc)
+
+	docs, err := query.Documents(c.Context()).GetAll()
+	if err != nil {
+		log.Fatalf("error get recent rooms: %v", err)
+	}
+
+	var rooms []map[string]interface{}
+	for _, doc := range docs {
+		var room Room
+		if err := doc.DataTo(&room); err != nil {
+			log.Fatalf("Failed to map Firestore document data: %v", err)
+		}
+		var newRoom map[string]interface{}
+		newRoom = structToMap(room)
+		newRoom["id"] = doc.Ref.ID
+
+		rooms = append(rooms, newRoom)
+	}
+
+	return c.JSON(fiber.Map{"data": rooms})
 }
 
 func main() {
@@ -439,6 +490,7 @@ func main() {
 	})
 	v1.Get("/guest/sign-in", signInWithGuestHandler)
 	v1.Post("/new-room", createNewRoomHandler)
+	v1.Get("/room/recent-rooms/:id", handleGetRecentRooms)
 
 	app.Listen(":3001")
 }
