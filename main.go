@@ -24,8 +24,9 @@ import (
 )
 
 type RoomRequest struct {
-	RoomName  string `json:"room_name"`
-	HostingID string `json:"hosting_id"`
+	RoomName   string `json:"room_name"`
+	HostingID  string `json:"hosting_id"`
+	DeskConfig string `json:desk_config"`
 }
 type RoomResponse struct {
 	RoomID    string `json:"room_id"`
@@ -36,20 +37,23 @@ type GuestSignInResponse struct {
 }
 
 type Member struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	LastActiveAt   string  `json:"last_active_at"`
-	EstimatedPoint float32 `json:"estimated_point"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	LastActiveAt   string `json:"last_active_at"`
+	EstimatedValue string `json:"estimated_value"`
 }
+
 type Room struct {
-	Name      string   `json:"name"`
-	Members   []Member `json:"members"`
-	Status    string   `json:"status"`
-	AvgPoint  float32  `json:"avg_point"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
-	MemberIDs []string `json:"member_ids"`
+	Name       string         `json:"name"`
+	Members    []Member       `json:"members"`
+	Status     string         `json:"status"`
+	Result     map[string]int `json:"result"`
+	CreatedAt  string         `json:"created_at"`
+	UpdatedAt  string         `json:"updated_at"`
+	MemberIDs  []string       `json:"member_ids"`
+	DeskConfig string         `json:"desk_config"`
 }
+
 type MessageAction struct {
 	Action  string      `json:"action"`
 	Payload interface{} `json:"payload"`
@@ -60,7 +64,7 @@ type JoinRoomPayload struct {
 }
 
 type EstimatedPointPayload struct {
-	Point float32 `json:"point"`
+	Value string `json:"value"`
 }
 
 var (
@@ -108,11 +112,6 @@ func generateUUID() string {
 
 	return strings.Join([]string{randomString, uuid, timestamp}, "-")
 }
-func getRoomDocRef(roomId string) *firestore.DocumentRef {
-	colRef := clientFirestore.Collection("rooms")
-	docRef := colRef.Doc(roomId)
-	return docRef
-}
 
 func getTimeNow() string {
 	return time.Now().Format(time.RFC3339)
@@ -124,12 +123,12 @@ func createNewRoomHandler(c *fiber.Ctx) error {
 	if err := json.Unmarshal(c.Body(), &request); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
-	if request.RoomName == "" || request.HostingID == "" {
+	if request.RoomName == "" || request.HostingID == "" || request.DeskConfig == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
 	}
 
 	roomID := generateUniqueRoomID()
-	room := Room{Name: request.RoomName, Status: "VOTING", CreatedAt: getTimeNow(), UpdatedAt: getTimeNow()}
+	room := Room{Name: request.RoomName, Status: "VOTING", CreatedAt: getTimeNow(), UpdatedAt: getTimeNow(), DeskConfig: request.DeskConfig}
 
 	docRef := roomsColRef.Doc(roomID)
 	docRef.Set(context.TODO(), room)
@@ -171,22 +170,10 @@ func broadcastMessage(roomId string, message any) {
 	}
 }
 
-func broadcastRoomInfo(roomId string) {
-	docRef := roomsColRef.Doc(roomId)
-	roomInfo, err := docRef.Get(context.Background())
-	if err != nil {
-		log.Printf("Error sending message to client: %v", err)
-	}
-	broadcastMessage(roomId, roomInfo)
-}
-
 func roomExists(roomId string) bool {
 	docRef := roomsColRef.Doc(roomId)
 	_, err := docRef.Get(context.TODO())
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func foundUser(uid string, members []Member) bool {
@@ -222,7 +209,7 @@ func joinRoom(payload interface{}, uid string, room *Room) bool {
 	}
 	name := joinRoomData.Name
 	room.Members = append(room.Members, Member{
-		ID: uid, Name: name, LastActiveAt: getTimeNow(), EstimatedPoint: -1})
+		ID: uid, Name: name, LastActiveAt: getTimeNow(), EstimatedValue: ""})
 	room.MemberIDs = append(room.MemberIDs, uid)
 
 	return true
@@ -248,35 +235,19 @@ func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
 		return false
 	}
 
-	point := updatePointData.Point
-	room.Members[index].EstimatedPoint = point
+	Value := updatePointData.Value
+	room.Members[index].EstimatedValue = Value
 	room.Members[index].LastActiveAt = getTimeNow()
 
 	return true
 }
 
-func getAveragePoint(room *Room) float32 {
-	scores := []float32{}
-	for _, member := range room.Members {
-		if member.EstimatedPoint != -1 {
-			scores = append(scores, member.EstimatedPoint)
-		}
+func getResult(members []Member) map[string]int {
+	result := make(map[string]int)
+	for _, member := range members {
+		result[member.EstimatedValue] = result[member.EstimatedValue] + 1
 	}
-	return calculateAverageScore(scores)
-}
-
-func calculateAverageScore(scores []float32) float32 {
-	var totalScore float32
-
-	for _, score := range scores {
-		totalScore += score
-	}
-
-	if len(scores) > 0 {
-		return totalScore / float32(len(scores))
-	}
-
-	return 0.0
+	return result
 }
 
 func handleRoomSocket(c *websocket.Conn) {
@@ -332,6 +303,7 @@ func handleRoomSocket(c *websocket.Conn) {
 		case "JOIN_ROOM":
 			if !foundUser(uid, room.Members) && joinRoom(receivedMessage.Payload, uid, &room) {
 				room.UpdatedAt = getTimeNow()
+				log.Println("room updated:", room)
 				docRef := roomsColRef.Doc(roomId)
 				docRef.Set(context.TODO(), room)
 				broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
@@ -353,12 +325,11 @@ func handleRoomSocket(c *websocket.Conn) {
 			} else {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
-		case "UPDATE_ESTIMATED_POINT":
+		case "UPDATE_ESTIMATED_VALUE":
 			if foundUser(uid, room.Members) {
 				index := findMemberIndex(room.Members, uid)
-
 				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &room) {
-					room.AvgPoint = getAveragePoint(&room)
+					room.Result = getResult(room.Members)
 					room.UpdatedAt = getTimeNow()
 					docRef := roomsColRef.Doc(roomId)
 					docRef.Set(context.TODO(), room)
@@ -384,17 +355,17 @@ func handleRoomSocket(c *websocket.Conn) {
 
 		case "RESET_ROOM":
 			for index := range room.Members {
-				room.Members[index].EstimatedPoint = -1
+				room.Members[index].EstimatedValue = ""
 			}
 			room.Status = "VOTING"
 			room.UpdatedAt = getTimeNow()
-			room.AvgPoint = 0
+			room.Result = make(map[string]int)
 			docRef := roomsColRef.Doc(roomId)
 
 			docRef.Update(context.TODO(), []firestore.Update{
 				{Path: "Status", Value: room.Status},
 				{Path: "UpdatedAt", Value: room.UpdatedAt},
-				{Path: "AvgPoint", Value: room.AvgPoint}})
+				{Path: "Result", Value: room.Result}})
 
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
 		}
@@ -466,6 +437,9 @@ func main() {
 	}
 
 	firestore, err := client.Firestore(context.TODO())
+	if err != nil {
+		log.Fatalf("error initializing firestore: %v", err)
+	}
 	clientFirestore = firestore
 	roomsColRef = clientFirestore.Collection("rooms")
 
