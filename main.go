@@ -245,7 +245,9 @@ func updateEstimatedPoint(payload interface{}, index int, room *Room) bool {
 func getResult(members []Member) map[string]int {
 	result := make(map[string]int)
 	for _, member := range members {
-		result[member.EstimatedValue] = result[member.EstimatedValue] + 1
+		if member.EstimatedValue != "" {
+			result[member.EstimatedValue] = result[member.EstimatedValue] + 1
+		}
 	}
 	return result
 }
@@ -365,6 +367,7 @@ func handleRoomSocket(c *websocket.Conn) {
 			docRef.Update(context.TODO(), []firestore.Update{
 				{Path: "Status", Value: room.Status},
 				{Path: "UpdatedAt", Value: room.UpdatedAt},
+				{Path: "Members", Value: room.Members},
 				{Path: "Result", Value: room.Result}})
 
 			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: room})
