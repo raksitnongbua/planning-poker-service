@@ -1,4 +1,4 @@
-module planning-poker-service
+module github.com/raksitnongbua/planning-poker-service
 
 go 1.21.4
 

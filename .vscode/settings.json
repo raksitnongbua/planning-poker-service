@@ -1,5 +1,5 @@
 {
-  "cSpell.words": ["Firestore"],
+  "cSpell.words": ["dotenv", "Firestore", "godotenv"],
   "[go]": {
     "editor.defaultFormatter": "golang.go"
   }
