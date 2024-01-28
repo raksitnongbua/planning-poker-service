@@ -54,60 +54,23 @@ func joinRoom(payload interface{}, uid string, room *domain.Room) bool {
 
 	return true
 }
-func broadcastMessage(roomId string, message any) {
+func broadcastMessage(roomId string, message interface{}) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
 
 	for client := range clients {
-		cRoomId := client.Locals("roomId")
-		if cRoomId != roomId {
+		clientRoomID := client.Locals("roomId")
+		if clientRoomID != roomId {
 			continue
 		}
 
 		err := client.WriteJSON(message)
-
 		if err != nil {
 			log.Printf("Error sending message to client: %v", err)
 		}
 	}
 }
 
-func updateEstimatedPoint(payload interface{}, index int, room *domain.Room) bool {
-	updatePointPayload, ok := payload.(map[string]interface{})
-	if !ok {
-		fmt.Println("Invalid payload format for UPDATE_POINT action.")
-		return false
-	}
-
-	var updatePointData EstimatedPointPayload
-	payloadBytes, err := json.Marshal(updatePointPayload)
-	if err != nil {
-		fmt.Println("Error marshaling payload:", err)
-		return false
-	}
-
-	err = json.Unmarshal(payloadBytes, &updatePointData)
-	if err != nil {
-		fmt.Println("Error unmarshal payload:", err)
-		return false
-	}
-
-	Value := updatePointData.Value
-	room.Members[index].EstimatedValue = Value
-	room.Members[index].LastActiveAt = timer.GetTimeNow()
-
-	return true
-}
-
-func getResult(members []domain.Member) map[string]int {
-	result := make(map[string]int)
-	for _, member := range members {
-		if member.EstimatedValue != "" {
-			result[member.EstimatedValue] = result[member.EstimatedValue] + 1
-		}
-	}
-	return result
-}
 func SocketRoomHandler(c *websocket.Conn) {
 	roomId := c.Params("id")
 
@@ -187,11 +150,20 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "UPDATE_ESTIMATED_VALUE":
 			if isUserInRoom {
 				index := room.FindMemberIndex(roomInfo.Members, uid)
-				if index != -1 && updateEstimatedPoint(receivedMessage.Payload, index, &roomInfo) {
-					roomInfo.Result = getResult(roomInfo.Members)
-					roomInfo.UpdatedAt = now
-					docRef := repository.RoomsColRef.Doc(roomId)
-					docRef.Set(context.TODO(), roomInfo)
+				if index != -1 {
+					estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
+					if err != nil {
+						c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+						return
+					}
+					updatedMembers := room.UpdateEstimatedValue(roomInfo.Members, index, estimatedPayload.Value)
+					calculatedResult := room.CalculateResult(roomInfo.Members)
+
+					if repo.UpdateEstimatedValue(roomId, updatedMembers, calculatedResult) != nil {
+						c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
+						return
+					}
+
 					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 				} else {
 					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})

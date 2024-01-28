@@ -9,8 +9,8 @@ import (
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	idgenerator "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/id_generator"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
-	"github.com/raksitnongbua/planning-poker-service/internal/repository"
 	"github.com/raksitnongbua/planning-poker-service/internal/repository/room"
+	repo "github.com/raksitnongbua/planning-poker-service/internal/repository/room"
 )
 
 func CreateNewRoomHandler(c *fiber.Ctx) error {
@@ -25,18 +25,20 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
 	}
 	now := timer.GetTimeNow()
-	roomID := idgenerator.GenerateUniqueRoomID()
+	roomId := idgenerator.GenerateUniqueRoomID()
 	room := domain.Room{Name: request.RoomName, Status: "VOTING", CreatedAt: now, UpdatedAt: now, DeskConfig: request.DeskConfig}
 
-	docRef := repository.RoomsColRef.Doc(roomID)
-	docRef.Set(context.TODO(), room)
+	err := repo.CreateNewRoom(roomId, room)
+	if err != nil {
+		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{"error": err.Error()})
+	}
 
-	fmt.Printf("Room created: %s (%s)\n", request.RoomName, roomID)
+	fmt.Printf("Room created: %s (%s)\n", request.RoomName, roomId)
 
 	createdAt := now
 
 	return c.JSON(RoomResponse{
-		RoomID:    roomID,
+		RoomID:    roomId,
 		CreatedAt: createdAt,
 	})
 }

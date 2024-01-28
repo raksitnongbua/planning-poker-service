@@ -8,6 +8,7 @@ import (
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/common"
+	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
 	"github.com/raksitnongbua/planning-poker-service/internal/repository"
 )
 
@@ -35,7 +36,7 @@ func QueryRecentRooms(ctx context.Context, id string) (recentRooms []map[string]
 	return rooms, nil
 }
 
-func CreateNewRoom(ctx context.Context, roomId string, room domain.Room) error {
+func CreateNewRoom(roomId string, room domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Set(context.TODO(), room)
 	return err
@@ -58,4 +59,11 @@ func GetRoomInfo(roomId string) domain.Room {
 		log.Fatalf("Failed to map Firestore document data: %v", err)
 	}
 	return roomInfo
+}
+
+func UpdateEstimatedValue(roomId string, members []domain.Member, calculatedResult map[string]int) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: members}, {Path: "Result", Value: calculatedResult}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
+
+	return err
 }
