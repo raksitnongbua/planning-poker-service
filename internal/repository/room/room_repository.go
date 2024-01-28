@@ -61,9 +61,30 @@ func GetRoomInfo(roomId string) domain.Room {
 	return roomInfo
 }
 
-func UpdateEstimatedValue(roomId string, members []domain.Member, calculatedResult map[string]int) error {
+func UpdateEstimatedValue(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: members}, {Path: "Result", Value: calculatedResult}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
+	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Result", Value: roomInfo.Result}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	return err
+}
 
+func UpdateNewJoiner(members []domain.Member, memberIds []string, roomId string) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: members}, {Path: "MemberIDs", Value: memberIds}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
+	return err
+}
+
+func SetRevealCards(roomId string, roomInfo domain.Room) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Status", Value: roomInfo.Status}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	return err
+}
+
+func ResetRoom(roomId string, roomInfo domain.Room) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.TODO(), []firestore.Update{
+		{Path: "Status", Value: roomInfo.Status},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+		{Path: "Members", Value: roomInfo.Members},
+		{Path: "Result", Value: roomInfo.Result}})
 	return err
 }

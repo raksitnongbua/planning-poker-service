@@ -1,20 +1,16 @@
 package roomsocket
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 
-	"cloud.google.com/go/firestore"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
-	"github.com/raksitnongbua/planning-poker-service/internal/repository"
-	repo "github.com/raksitnongbua/planning-poker-service/internal/repository/room"
 )
 
 type MessageAction struct {
@@ -71,10 +67,14 @@ func broadcastMessage(roomId string, message interface{}) {
 	}
 }
 
+func noticeUpdateRoom(roomId string, roomInfo domain.Room) {
+	broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
+}
+
 func SocketRoomHandler(c *websocket.Conn) {
 	roomId := c.Params("id")
 
-	if !repo.RoomExists(roomId) {
+	if !room.IsRoomExists(roomId) {
 		c.WriteJSON(fiber.Map{"error": "Room not found"})
 		log.Printf("Room with ID %s not found", roomId)
 		c.Close()
@@ -95,10 +95,10 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 		_ = c.Close()
 	}()
-	roomInfo := repo.GetRoomInfo(roomId)
+	roomInfo := room.GetRoomInfo(roomId)
 
 	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
-	if !room.IsUserInRoom(uid, roomInfo.Members) {
+	if !room.IsUserInRoomWithId(uid, roomId) {
 		c.WriteJSON(MessageAction{Action: "NEED_TO_JOIN"})
 	}
 
@@ -111,95 +111,65 @@ func SocketRoomHandler(c *websocket.Conn) {
 			log.Println("read:", err)
 			break
 		}
-
-		log.Printf("recv: %s", msg)
 		var receivedMessage MessageAction
 		if err := json.Unmarshal(msg, &receivedMessage); err != nil {
 			log.Println("json unmarshal:", err)
 			break
 		}
-		roomInfo := repo.GetRoomInfo(roomId)
-		now := timer.GetTimeNow()
-		isUserInRoom := room.IsUserInRoom(uid, roomInfo.Members)
+
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
-			if !isUserInRoom && joinRoom(receivedMessage.Payload, uid, &roomInfo) {
-				roomInfo.UpdatedAt = now
-				log.Println("room updated:", roomInfo)
-				docRef := repository.RoomsColRef.Doc(roomId)
-				docRef.Set(context.TODO(), roomInfo)
-				broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
-			} else {
+			joinRoomPayload, err := TransformPayloadToJoinRoom(receivedMessage.Payload)
+			if err != nil {
+				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+				return
+			}
+			roomInfo, err := room.JoinRoom(joinRoomPayload.Name, uid, roomId)
+			if err != nil {
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
+				return
 			}
-		case "UPDATE_ACTIVE_USER":
-			if isUserInRoom {
-				index := room.FindMemberIndex(roomInfo.Members, uid)
+			noticeUpdateRoom(roomId, roomInfo)
 
-				if index != -1 {
-					roomInfo.Members[index].LastActiveAt = now
-					docRef := repository.RoomsColRef.Doc(roomId)
-					docRef.Set(context.TODO(), roomInfo)
-					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
-				} else {
-					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
-				}
-			} else {
-				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
-			}
 		case "UPDATE_ESTIMATED_VALUE":
-			if isUserInRoom {
-				index := room.FindMemberIndex(roomInfo.Members, uid)
-				if index != -1 {
-					estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
-					if err != nil {
-						c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
-						return
-					}
-					updatedMembers := room.UpdateEstimatedValue(roomInfo.Members, index, estimatedPayload.Value)
-					calculatedResult := room.CalculateResult(roomInfo.Members)
-
-					if repo.UpdateEstimatedValue(roomId, updatedMembers, calculatedResult) != nil {
-						c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
-						return
-					}
-
-					broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
-				} else {
-					c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+			index := room.FindMemberIndex(roomInfo.Members, uid)
+			if index != -1 {
+				estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
+				if err != nil {
+					c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+					return
 				}
+				roomInfo, err := room.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
+
+				if err != nil {
+					c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
+					return
+				}
+				noticeUpdateRoom(roomId, roomInfo)
+
 			} else {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
-			if isUserInRoom {
-				index := room.FindMemberIndex(roomInfo.Members, uid)
-				if index != -1 {
-					roomInfo.Members[index].LastActiveAt = now
+			index := room.FindMemberIndex(roomInfo.Members, uid)
+			if index != -1 {
+				roomInfo, err := room.RevealCards(index, roomId)
+				if err != nil {
+					c.WriteJSON(fiber.Map{"error": "REVEAL_CARDS_FAILED"})
+					return
 				}
+
+				noticeUpdateRoom(roomId, roomInfo)
 			}
-			roomInfo.UpdatedAt = now
-			roomInfo.Status = "REVEALED_CARDS"
-			docRef := repository.RoomsColRef.Doc(roomId)
-			docRef.Set(context.TODO(), roomInfo)
-			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 
 		case "RESET_ROOM":
-			for index := range roomInfo.Members {
-				roomInfo.Members[index].EstimatedValue = ""
+			roomInfo, err := room.ResetRoom(roomId)
+			if err != nil {
+				c.WriteJSON(fiber.Map{"error": "RESET_ROOM_FAILED"})
+				return
 			}
-			roomInfo.Status = "VOTING"
-			roomInfo.UpdatedAt = now
-			roomInfo.Result = make(map[string]int)
-			docRef := repository.RoomsColRef.Doc(roomId)
+			noticeUpdateRoom(roomId, roomInfo)
 
-			docRef.Update(context.TODO(), []firestore.Update{
-				{Path: "Status", Value: roomInfo.Status},
-				{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
-				{Path: "Members", Value: roomInfo.Members},
-				{Path: "Result", Value: roomInfo.Result}})
-
-			broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 		}
 	}
 }
