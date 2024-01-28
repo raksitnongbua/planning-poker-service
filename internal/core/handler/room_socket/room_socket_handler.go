@@ -132,6 +132,8 @@ func SocketRoomHandler(c *websocket.Conn) {
 				}
 
 				noticeUpdateRoom(roomId, roomInfo)
+			} else {
+				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 
 		case "RESET_ROOM":
