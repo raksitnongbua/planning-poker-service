@@ -2,15 +2,14 @@ package roomsocket
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"sync"
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
-	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
-	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
+	roomService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
+	socketService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room_socket"
 )
 
 type MessageAction struct {
@@ -23,33 +22,6 @@ var (
 	clientsMu sync.Mutex
 )
 
-func joinRoom(payload interface{}, uid string, room *domain.Room) bool {
-
-	joinRoomPayload, ok := payload.(map[string]interface{})
-	if !ok {
-		fmt.Println("Invalid payload format for JOIN_ROOM action.")
-		return false
-	}
-
-	var joinRoomData JoinRoomPayload
-	payloadBytes, err := json.Marshal(joinRoomPayload)
-	if err != nil {
-		fmt.Println("Error marshaling payload:", err)
-		return false
-	}
-
-	err = json.Unmarshal(payloadBytes, &joinRoomData)
-	if err != nil {
-		fmt.Println("Error unmarshal payload:", err)
-		return false
-	}
-	name := joinRoomData.Name
-	room.Members = append(room.Members, domain.Member{
-		ID: uid, Name: name, LastActiveAt: timer.GetTimeNow(), EstimatedValue: ""})
-	room.MemberIDs = append(room.MemberIDs, uid)
-
-	return true
-}
 func broadcastMessage(roomId string, message interface{}) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
@@ -74,7 +46,7 @@ func noticeUpdateRoom(roomId string, roomInfo domain.Room) {
 func SocketRoomHandler(c *websocket.Conn) {
 	roomId := c.Params("id")
 
-	if !room.IsRoomExists(roomId) {
+	if !roomService.IsRoomExists(roomId) {
 		c.WriteJSON(fiber.Map{"error": "Room not found"})
 		log.Printf("Room with ID %s not found", roomId)
 		c.Close()
@@ -95,10 +67,10 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 		_ = c.Close()
 	}()
-	roomInfo := room.GetRoomInfo(roomId)
+	roomInfo := roomService.GetRoomInfo(roomId)
 
 	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
-	if !room.IsUserInRoomWithId(uid, roomId) {
+	if !roomService.IsUserInRoomWithId(uid, roomId) {
 		c.WriteJSON(MessageAction{Action: "NEED_TO_JOIN"})
 	}
 
@@ -124,7 +96,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 				return
 			}
-			roomInfo, err := room.JoinRoom(joinRoomPayload.Name, uid, roomId)
+			roomInfo, err := socketService.JoinRoom(joinRoomPayload.Name, uid, roomId)
 			if err != nil {
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
 				return
@@ -132,14 +104,14 @@ func SocketRoomHandler(c *websocket.Conn) {
 			noticeUpdateRoom(roomId, roomInfo)
 
 		case "UPDATE_ESTIMATED_VALUE":
-			index := room.FindMemberIndex(roomInfo.Members, uid)
+			index := socketService.FindMemberIndex(roomInfo.Members, uid)
 			if index != -1 {
 				estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
 				if err != nil {
 					c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 					return
 				}
-				roomInfo, err := room.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
+				roomInfo, err := socketService.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
 
 				if err != nil {
 					c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
@@ -151,9 +123,9 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
-			index := room.FindMemberIndex(roomInfo.Members, uid)
+			index := socketService.FindMemberIndex(roomInfo.Members, uid)
 			if index != -1 {
-				roomInfo, err := room.RevealCards(index, roomId)
+				roomInfo, err := socketService.RevealCards(index, roomId)
 				if err != nil {
 					c.WriteJSON(fiber.Map{"error": "REVEAL_CARDS_FAILED"})
 					return
@@ -163,7 +135,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 
 		case "RESET_ROOM":
-			roomInfo, err := room.ResetRoom(roomId)
+			roomInfo, err := socketService.ResetRoom(roomId)
 			if err != nil {
 				c.WriteJSON(fiber.Map{"error": "RESET_ROOM_FAILED"})
 				return
