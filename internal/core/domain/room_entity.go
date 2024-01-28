@@ -1,11 +1,4 @@
-package core
-
-type Member struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	LastActiveAt   string `json:"last_active_at"`
-	EstimatedValue string `json:"estimated_value"`
-}
+package domain
 
 type Room struct {
 	Name       string         `json:"name"`
