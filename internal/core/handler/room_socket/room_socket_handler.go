@@ -98,12 +98,14 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			roomInfo, err := socketService.JoinRoom(joinRoomPayload.Name, uid, roomId)
 			if err != nil {
+				log.Printf(err.Error())
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
 				return
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
 		case "UPDATE_ESTIMATED_VALUE":
+			roomInfo = roomService.GetRoomInfo(roomId)
 			index := socketService.FindMemberIndex(roomInfo.Members, uid)
 			if index != -1 {
 				estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
@@ -114,6 +116,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 				roomInfo, err := socketService.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
 
 				if err != nil {
+					log.Printf(err.Error())
 					c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
 					return
 				}
@@ -123,6 +126,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
+			roomInfo = roomService.GetRoomInfo(roomId)
 			index := socketService.FindMemberIndex(roomInfo.Members, uid)
 			if index != -1 {
 				roomInfo, err := socketService.RevealCards(index, roomId)

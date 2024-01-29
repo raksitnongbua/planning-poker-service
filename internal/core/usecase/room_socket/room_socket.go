@@ -1,8 +1,6 @@
 package roomsocket
 
 import (
-	"fmt"
-
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	roomService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
@@ -32,9 +30,6 @@ func calculateResult(members []domain.Member) map[string]int {
 }
 
 func JoinRoom(name, id, roomId string) (room domain.Room, err error) {
-	if !roomService.IsUserInRoomWithId(id, roomId) {
-		return domain.Room{}, fmt.Errorf("user is not in the room")
-	}
 	roomInfo := roomService.GetRoomInfo(roomId)
 
 	newMember := domain.Member{
@@ -54,12 +49,14 @@ func JoinRoom(name, id, roomId string) (room domain.Room, err error) {
 func UpdateEstimatedValue(index int, value, roomId string) (room domain.Room, err error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)
-	calculatedResult := calculateResult(roomInfo.Members)
 
-	roomInfo.Result = calculatedResult
 	roomInfo.Members[index].EstimatedValue = value
 	roomInfo.Members[index].LastActiveAt = now
 	roomInfo.UpdatedAt = now
+
+	// after update estimated value we need to recalculate result and update it
+	calculatedResult := calculateResult(roomInfo.Members)
+	roomInfo.Result = calculatedResult
 
 	if repo.UpdateEstimatedValue(roomId, roomInfo) != nil {
 		return domain.Room{}, err
@@ -76,7 +73,7 @@ func RevealCards(commanderIndex int, roomId string) (room domain.Room, err error
 	roomInfo.Status = "REVEALED_CARDS"
 	roomInfo.UpdatedAt = now
 	roomInfo.Members[commanderIndex].LastActiveAt = now
-
+	roomInfo.Result = calculateResult(roomInfo.Members)
 	if repo.SetRevealCards(roomId, roomInfo) != nil {
 		return domain.Room{}, err
 	}
