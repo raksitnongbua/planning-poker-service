@@ -12,10 +12,10 @@ import (
 	"github.com/raksitnongbua/planning-poker-service/internal/repository"
 )
 
-func QueryRecentRooms(ctx context.Context, id string) (recentRooms []map[string]interface{}, err error) {
+func QueryRecentRooms(id string) (recentRooms []map[string]interface{}, err error) {
 	query := repository.RoomsColRef.Where("MemberIDs", "array-contains", id).OrderBy("UpdatedAt", firestore.Desc)
 
-	docs, err := query.Documents(ctx).GetAll()
+	docs, err := query.Documents(context.Background()).GetAll()
 	if err != nil {
 		log.Fatalf("error get recent rooms: %v", err)
 		return nil, err
@@ -38,19 +38,19 @@ func QueryRecentRooms(ctx context.Context, id string) (recentRooms []map[string]
 
 func CreateNewRoom(roomId string, room domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Set(context.TODO(), room)
+	_, err := docRef.Set(context.Background(), room)
 	return err
 }
 
 func RoomExists(roomId string) bool {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Get(context.TODO())
+	_, err := docRef.Get(context.Background())
 	return err == nil
 }
 
 func GetRoomInfo(roomId string) domain.Room {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	docSnapshot, err := docRef.Get(context.TODO())
+	docSnapshot, err := docRef.Get(context.Background())
 	if err != nil {
 		log.Fatalf("Failed to get document: %v", err)
 	}
@@ -63,25 +63,25 @@ func GetRoomInfo(roomId string) domain.Room {
 
 func UpdateEstimatedValue(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Result", Value: roomInfo.Result}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Result", Value: roomInfo.Result}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
 	return err
 }
 
 func UpdateNewJoiner(members []domain.Member, memberIds []string, roomId string) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: members}, {Path: "MemberIDs", Value: memberIds}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: members}, {Path: "MemberIDs", Value: memberIds}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
 	return err
 }
 
 func SetRevealCards(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.TODO(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Status", Value: roomInfo.Status}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Status", Value: roomInfo.Status}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
 	return err
 }
 
 func ResetRoom(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.TODO(), []firestore.Update{
+	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Status", Value: roomInfo.Status},
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 		{Path: "Members", Value: roomInfo.Members},
