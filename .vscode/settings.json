@@ -1,5 +1,13 @@
 {
-  "cSpell.words": ["Firestore"],
+  "cSpell.words": [
+    "dotenv",
+    "Firestore",
+    "godotenv",
+    "gofiber",
+    "idgenerator",
+    "raksitnongbua",
+    "roomsocket"
+  ],
   "[go]": {
     "editor.defaultFormatter": "golang.go"
   }
