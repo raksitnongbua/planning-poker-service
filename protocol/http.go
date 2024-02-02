@@ -37,5 +37,5 @@ func ServeREST() {
 	v1.Post("/new-room", room.CreateNewRoomHandler)
 	v1.Get("/room/recent-rooms/:id", room.GetRecentRoomsHandler)
 
-	app.Listen(":3001")
+	app.Listen(":8080")
 }
