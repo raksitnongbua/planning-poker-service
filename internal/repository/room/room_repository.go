@@ -36,7 +36,7 @@ func QueryRecentRooms(id string) (recentRooms []map[string]interface{}, err erro
 	return rooms, nil
 }
 
-func CreateNewRoom(roomId string, room domain.Room) error {
+func CreateNewRoom(roomId string, room *domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Set(context.Background(), room)
 	return err
