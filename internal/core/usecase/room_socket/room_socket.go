@@ -18,27 +18,14 @@ func FindMemberIndex(members []domain.Member, targetId string) int {
 	return -1
 }
 
-func calculateResult(members []domain.Member) map[string]int {
-	result := make(map[string]int)
-	for _, member := range members {
-		if member.EstimatedValue != "" {
-			result[member.EstimatedValue] = result[member.EstimatedValue] + 1
-		}
-	}
-
-	return result
-}
-
-func JoinRoom(name, id, roomId string) (room domain.Room, err error) {
+func JoinRoom(name, id, roomId string) (domain.Room, error) {
 	roomInfo := roomService.GetRoomInfo(roomId)
 
-	newMember := domain.Member{
-		ID: id, Name: name, LastActiveAt: timer.GetTimeNow(), EstimatedValue: ""}
+	newMember := domain.NewMember(id, name, timer.GetTimeNow())
 
-	roomInfo.Members = append(roomInfo.Members, newMember)
-	roomInfo.MemberIDs = append(roomInfo.MemberIDs, id)
+	roomInfo.JoinRoom(newMember, timer.GetTimeNow())
 
-	err = repo.UpdateNewJoiner(roomInfo.Members, roomInfo.MemberIDs, roomId)
+	err := repo.UpdateNewJoiner(roomInfo.Members, roomInfo.MemberIDs, roomId)
 
 	if err != nil {
 		return domain.Room{}, err
@@ -46,59 +33,45 @@ func JoinRoom(name, id, roomId string) (room domain.Room, err error) {
 	return roomInfo, nil
 }
 
-func UpdateEstimatedValue(index int, value, roomId string) (room domain.Room, err error) {
+func UpdateEstimatedValue(index int, value, roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)
+	roomInfo.UpdateEstimatedValue(index, value, now)
 
-	roomInfo.Members[index].EstimatedValue = value
-	roomInfo.Members[index].LastActiveAt = now
-	roomInfo.UpdatedAt = now
+	// After update estimated value we need to recalculate result and update it.
+	roomInfo.UpdateResult()
 
-	// after update estimated value we need to recalculate result and update it
-	calculatedResult := calculateResult(roomInfo.Members)
-	roomInfo.Result = calculatedResult
-
-	if repo.UpdateEstimatedValue(roomId, roomInfo) != nil {
+	err := repo.UpdateEstimatedValue(roomId, roomInfo)
+	if err != nil {
 		return domain.Room{}, err
 	}
 
 	return roomInfo, nil
 }
 
-func RevealCards(commanderIndex int, roomId string) (room domain.Room, err error) {
+func RevealCards(actorIndex int, roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 
 	roomInfo := roomService.GetRoomInfo(roomId)
+	roomInfo.RevealCards(actorIndex, now)
 
-	roomInfo.Status = "REVEALED_CARDS"
-	roomInfo.UpdatedAt = now
-	roomInfo.Members[commanderIndex].LastActiveAt = now
-	roomInfo.Result = calculateResult(roomInfo.Members)
-	if repo.SetRevealCards(roomId, roomInfo) != nil {
+	err := repo.SetRevealCards(roomId, roomInfo)
+	if err != nil {
 		return domain.Room{}, err
 	}
 
 	return roomInfo, nil
 }
 
-func resetEstimatedPointMembers(members []domain.Member) []domain.Member {
-	for i := range members {
-		members[i].EstimatedValue = ""
-	}
-
-	return members
-}
-
-func ResetRoom(roomId string) (room domain.Room, err error) {
+func ResetRoom(roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)
 	roomInfo.UpdatedAt = now
 
-	roomInfo.Status = "VOTING"
-	roomInfo.Result = make(map[string]int)
-	roomInfo.Members = resetEstimatedPointMembers(roomInfo.Members)
+	roomInfo.Restart(now)
 
-	if repo.ResetRoom(roomId, roomInfo) != nil {
+	err := repo.ResetRoom(roomId, roomInfo)
+	if err != nil {
 		return domain.Room{}, err
 	}
 	return roomInfo, nil

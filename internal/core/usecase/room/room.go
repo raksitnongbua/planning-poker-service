@@ -7,19 +7,9 @@ import (
 	repo "github.com/raksitnongbua/planning-poker-service/internal/repository/room"
 )
 
-func isUserInRoom(userId string, members []domain.Member) bool {
-	for _, member := range members {
-		if member.ID == userId {
-			return true
-		}
-	}
-
-	return false
-}
-
 func IsUserInRoomWithId(userId, roomId string) bool {
 	roomInfo := GetRoomInfo(roomId)
-	return isUserInRoom(userId, roomInfo.Members)
+	return roomInfo.CheckMember(userId)
 }
 
 func GetRoomInfo(roomId string) domain.Room {
@@ -35,12 +25,12 @@ func GetResendRooms(id string) (rooms []map[string]interface{}, err error) {
 	return rooms, err
 }
 
-func CreateNewRoom(roomName, deskConfig string) (roomId string, err error) {
+func CreateNewRoom(roomName, deskConfig string) (string, error) {
 	now := timer.GetTimeNow()
-	roomId = idgenerator.GenerateUniqueRoomID()
-	room := domain.Room{Name: roomName, Status: "VOTING", CreatedAt: now, UpdatedAt: now, DeskConfig: deskConfig}
+	roomId := idgenerator.GenerateUniqueRoomID()
+	room := domain.NewRoom(roomName, roomId, deskConfig, now)
 
-	err = repo.CreateNewRoom(roomId, room)
+	err := repo.CreateNewRoom(roomId, room)
 
 	if err != nil {
 		return "", err
