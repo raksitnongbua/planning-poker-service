@@ -18,10 +18,10 @@ func FindMemberIndex(members []domain.Member, targetId string) int {
 	return -1
 }
 
-func JoinRoom(name, id, roomId string) (domain.Room, error) {
+func JoinRoom(id, name, picture, roomId string) (domain.Room, error) {
 	roomInfo := roomService.GetRoomInfo(roomId)
 
-	newMember := domain.NewMember(id, name, timer.GetTimeNow())
+	newMember := domain.NewMember(id, name, picture, timer.GetTimeNow())
 
 	roomInfo.JoinRoom(newMember, timer.GetTimeNow())
 
