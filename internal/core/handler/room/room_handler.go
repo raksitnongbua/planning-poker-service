@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/raksitnongbua/planning-poker-service/constants"
+	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/profile"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
 )
@@ -32,7 +34,19 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 }
 
 func GetRecentRoomsHandler(c *fiber.Ctx) error {
-	id := c.Params("id")
+	var id string
+	id = c.Params("id") // Guest Id fallback
+	session := c.Cookies(constants.NextAuthSessionCookie)
+	if session != "" {
+		p, err := profile.GetProfile(session)
+		if err == nil {
+			id = p.UID
+		}
+	}
+	if id == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
+	}
+
 	rooms, err := room.GetResendRooms(id)
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{"error": err.Error()})

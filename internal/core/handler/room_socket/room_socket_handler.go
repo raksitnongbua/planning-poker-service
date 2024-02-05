@@ -52,9 +52,6 @@ func SocketRoomHandler(c *websocket.Conn) {
 		c.Close()
 		return
 	}
-	uid := c.Params("uid")
-
-	c.Locals("roomId", roomId)
 
 	clientsMu.Lock()
 	clients[c] = true
@@ -67,6 +64,10 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 		_ = c.Close()
 	}()
+
+	uid := c.Params("uid")
+	c.Locals("roomId", roomId)
+
 	roomInfo := roomService.GetRoomInfo(roomId)
 
 	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
@@ -96,7 +97,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 				return
 			}
-			roomInfo, err := socketService.JoinRoom(joinRoomPayload.Name, uid, roomId)
+			roomInfo, err := socketService.JoinRoom(uid, joinRoomPayload.Name, joinRoomPayload.Profile, roomId)
 			if err != nil {
 				log.Printf(err.Error())
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
