@@ -36,12 +36,23 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 func GetRecentRoomsHandler(c *fiber.Ctx) error {
 	var id string
 	id = c.Params("id") // Guest Id fallback
-	session := c.Cookies(constants.NextAuthSessionCookie)
+
+	var cookieName string
+	if c.Secure() {
+		cookieName = constants.NextAuthSecureSessionCookie
+	} else {
+		cookieName = constants.NextAuthSessionCookie
+	}
+
+	session := c.Cookies(cookieName)
 	if session != "" {
 		p, err := profile.GetProfile(session)
-		if err == nil {
-			id = p.UID
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 		}
+		id = p.UID
+	} else {
+		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 	if id == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
