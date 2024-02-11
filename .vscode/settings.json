@@ -5,6 +5,7 @@
     "godotenv",
     "gofiber",
     "idgenerator",
+    "NEXTAUTH",
     "raksitnongbua",
     "roomsocket"
   ],

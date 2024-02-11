@@ -22,6 +22,7 @@ require (
 	cloud.google.com/go/longrunning v0.5.4 // indirect
 	cloud.google.com/go/storage v1.36.0 // indirect
 	github.com/andybalholm/brotli v1.0.6 // indirect
+	github.com/caarlos0/env/v10 v10.0.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
 	github.com/fasthttp/websocket v1.5.7 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect

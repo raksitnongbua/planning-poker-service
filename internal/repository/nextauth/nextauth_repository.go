@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwe"
+	"github.com/raksitnongbua/planning-poker-service/configs"
+	"github.com/raksitnongbua/planning-poker-service/constants"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	"golang.org/x/crypto/hkdf"
 )
@@ -37,11 +38,9 @@ func GetProfile(tokenEncrypted string) (*domain.Profile, error) {
 
 func decryptJWE(tokenEncrypted string) (NextAuthProfile, error) {
 	var profile NextAuthProfile
-	nextAuthSecret := os.Getenv("NEXTAUTH_SECRET")
-	info := "NextAuth.js Generated Encryption Key"
-
+	nextAuthSecret := configs.Conf.AuthSecret
 	hash := sha256.New
-	kdf := hkdf.New(hash, []byte(nextAuthSecret), []byte(""), []byte(info))
+	kdf := hkdf.New(hash, []byte(nextAuthSecret), []byte(""), []byte(constants.NextAuthEncryptionInfo))
 	key := make([]byte, 32)
 	_, _ = io.ReadFull(kdf, key)
 
