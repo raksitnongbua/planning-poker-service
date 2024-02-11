@@ -17,7 +17,6 @@ func Init() {
 	if err := godotenv.Load(".env"); err != nil {
 		panic(err.Error())
 	}
-	Conf = config{}
 	if err := env.Parse(&Conf); err != nil {
 		panic(err.Error())
 	}
