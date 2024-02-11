@@ -37,16 +37,15 @@ func GetRecentRoomsHandler(c *fiber.Ctx) error {
 	var id string
 	id = c.Params("id") // Guest Id fallback
 
-	var cookieName string
+	var cookieKey string
 	if c.Secure() {
-		cookieName = constants.NextAuthSecureSessionCookie
+		cookieKey = constants.SecureSessionCookie
 	} else {
-		cookieName = constants.NextAuthSessionCookie
+		cookieKey = constants.SessionCookie
 	}
-
-	session := c.Cookies(cookieName)
-	if session != "" {
-		p, err := profile.GetProfile(session)
+	sessionCookie := c.Cookies(cookieKey)
+	if sessionCookie != "" {
+		p, err := profile.GetProfile(sessionCookie)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 		}
