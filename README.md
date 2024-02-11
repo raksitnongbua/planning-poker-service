@@ -2,7 +2,7 @@
 
 This project is a Planning Poker backend implemented in Golang, featuring a Backend For Frontend (BFF) architecture. Planning Poker is a collaborative estimation technique used in agile project management.
 
-### [Demo](https://corgi-planning-poker.vercel.app/)
+### [Website](https://www.corgiplanningpoker.com)
 
 ## Contributing
 

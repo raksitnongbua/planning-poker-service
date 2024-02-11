@@ -3,11 +3,10 @@ package repository
 import (
 	"context"
 	"log"
-	"os"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go"
-	"github.com/joho/godotenv"
+	"github.com/raksitnongbua/planning-poker-service/configs"
 	"google.golang.org/api/option"
 )
 
@@ -20,12 +19,8 @@ func newRoomsCollectionRef() *firestore.CollectionRef {
 	return clientFirestore.Collection("rooms")
 }
 
-func init() {
-	// Load dotenv configuration
-	if err := godotenv.Load(".env"); err != nil {
-		panic(err.Error())
-	}
-	firebaseCredentials := os.Getenv("FIREBASE_CREDENTIALS")
+func Init() {
+	firebaseCredentials := configs.Conf.FirebaseCredentials
 	if firebaseCredentials == "" {
 		log.Fatal("FIREBASE_CREDENTIALS is not set")
 	}

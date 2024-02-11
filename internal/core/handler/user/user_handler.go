@@ -8,7 +8,7 @@ import (
 func SignInWithGuestHandler(c *fiber.Ctx) error {
 	uuid := idgenerator.GenerateUUID()
 
-	return c.JSON(GuestSignInResponse{
+	return c.JSON(guestSignInResponse{
 		UID: uuid,
 	})
 }
