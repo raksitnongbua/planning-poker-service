@@ -12,7 +12,7 @@ import (
 	socketService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room_socket"
 )
 
-type MessageAction struct {
+type messageAction struct {
 	Action  string      `json:"action"`
 	Payload interface{} `json:"payload"`
 }
@@ -40,7 +40,7 @@ func broadcastMessage(roomId string, message interface{}) {
 }
 
 func noticeUpdateRoom(roomId string, roomInfo domain.Room) {
-	broadcastMessage(roomId, MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
+	broadcastMessage(roomId, messageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 }
 
 func SocketRoomHandler(c *websocket.Conn) {
@@ -70,9 +70,9 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 	roomInfo := roomService.GetRoomInfo(roomId)
 
-	c.WriteJSON(MessageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
+	c.WriteJSON(messageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 	if !roomService.IsUserInRoomWithId(uid, roomId) {
-		c.WriteJSON(MessageAction{Action: "NEED_TO_JOIN"})
+		c.WriteJSON(messageAction{Action: "NEED_TO_JOIN"})
 	}
 
 	var (
@@ -84,7 +84,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			log.Println("read:", err)
 			break
 		}
-		var receivedMessage MessageAction
+		var receivedMessage messageAction
 		if err := json.Unmarshal(msg, &receivedMessage); err != nil {
 			log.Println("json unmarshal:", err)
 			break
@@ -92,7 +92,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
-			joinRoomPayload, err := TransformPayloadToJoinRoom(receivedMessage.Payload)
+			joinRoomPayload, err := transformPayloadToJoinRoom(receivedMessage.Payload)
 			if err != nil {
 				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 				return
@@ -109,7 +109,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			roomInfo = roomService.GetRoomInfo(roomId)
 			index := socketService.FindMemberIndex(roomInfo.Members, uid)
 			if index != -1 {
-				estimatedPayload, err := TransformPayloadToEstimatedPoint(receivedMessage.Payload)
+				estimatedPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
 				if err != nil {
 					c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 					return

@@ -1,5 +1,5 @@
 package user
 
-type GuestSignInResponse struct {
+type guestSignInResponse struct {
 	UID string `json:"uuid"`
 }

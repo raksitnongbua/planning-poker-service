@@ -5,42 +5,42 @@ import (
 	"fmt"
 )
 
-func TransformPayloadToEstimatedPoint(payload interface{}) (data EstimatedPointPayload, err error) {
+func transformPayloadToEstimatedPoint(payload interface{}) (data estimatedPointPayload, err error) {
 	updatePointPayload, ok := payload.(map[string]interface{})
 	if !ok {
-		return EstimatedPointPayload{}, fmt.Errorf("Invalid payload format for UPDATE_POINT action")
+		return estimatedPointPayload{}, fmt.Errorf("Invalid payload format for UPDATE_POINT action")
 	}
 
-	var updatePointData EstimatedPointPayload
+	var updatePointData estimatedPointPayload
 	payloadBytes, err := json.Marshal(updatePointPayload)
 	if err != nil {
-		return EstimatedPointPayload{}, fmt.Errorf("Error marshaling payload: %d", err)
+		return estimatedPointPayload{}, fmt.Errorf("Error marshaling payload: %d", err)
 
 	}
 
 	err = json.Unmarshal(payloadBytes, &updatePointData)
 	if err != nil {
-		return EstimatedPointPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
+		return estimatedPointPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
 	}
 
 	return updatePointData, nil
 }
 
-func TransformPayloadToJoinRoom(payload interface{}) (data JoinRoomPayload, err error) {
-	joinRoomPayload, ok := payload.(map[string]interface{})
+func transformPayloadToJoinRoom(payload interface{}) (data joinRoomPayload, err error) {
+	payload, ok := payload.(map[string]interface{})
 	if !ok {
-		return JoinRoomPayload{}, fmt.Errorf("Invalid payload format for JOIN_ROOM action")
+		return joinRoomPayload{}, fmt.Errorf("Invalid payload format for JOIN_ROOM action")
 	}
 
-	var joinRoomData JoinRoomPayload
-	payloadBytes, err := json.Marshal(joinRoomPayload)
+	var joinRoomData joinRoomPayload
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return JoinRoomPayload{}, fmt.Errorf("Error marshaling payload: %d", err)
+		return joinRoomPayload{}, fmt.Errorf("Error marshaling payload: %d", err)
 	}
 
 	err = json.Unmarshal(payloadBytes, &joinRoomData)
 	if err != nil {
-		return JoinRoomPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
+		return joinRoomPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
 	}
 
 	return joinRoomData, nil

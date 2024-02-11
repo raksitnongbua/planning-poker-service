@@ -1,8 +1,6 @@
 package room
 
 import (
-	"encoding/json"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/raksitnongbua/planning-poker-service/constants"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/profile"
@@ -11,14 +9,13 @@ import (
 )
 
 func CreateNewRoomHandler(c *fiber.Ctx) error {
-	var req RoomRequest
-
-	if err := json.Unmarshal(c.Body(), &req); err != nil {
-		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+	req, err := unmarshalRoomRequest(c.Body())
+	if err != nil {
+		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	if req.RoomName == "" || req.HostingID == "" || req.DeskConfig == "" {
-		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
+		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{"error": "Missing required fields"})
 	}
 	now := timer.GetTimeNow()
 
@@ -27,7 +24,7 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	return c.JSON(RoomResponse{
+	return c.JSON(roomResponse{
 		RoomID:    roomID,
 		CreatedAt: now,
 	})

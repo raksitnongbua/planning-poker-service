@@ -1,9 +1,9 @@
 package roomsocket
 
-type JoinRoomPayload struct {
+type joinRoomPayload struct {
 	Name    string `json:"name"`
 	Profile string `json:"profile"`
 }
-type EstimatedPointPayload struct {
+type estimatedPointPayload struct {
 	Value string `json:"value"`
 }
