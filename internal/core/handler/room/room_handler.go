@@ -47,8 +47,6 @@ func GetRecentRoomsHandler(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 		}
 		id = p.UID
-	} else {
-		return c.SendStatus(fiber.StatusUnauthorized)
 	}
 	if id == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing required fields"})
