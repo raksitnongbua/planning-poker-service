@@ -3,7 +3,6 @@ package room
 import (
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	idgenerator "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/id_generator"
-	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
 	repo "github.com/raksitnongbua/planning-poker-service/internal/repository/room"
 )
 
@@ -25,10 +24,13 @@ func GetResendRooms(id string) (rooms []map[string]interface{}, err error) {
 	return rooms, err
 }
 
+func CleanupExpiredRooms() (domain.CleanupResult, error) {
+	return repo.DeleteExpiredRooms()
+}
+
 func CreateNewRoom(roomName, deskConfig string) (string, error) {
-	now := timer.GetTimeNow()
 	roomId := idgenerator.GenerateUniqueRoomID()
-	room := domain.NewRoom(roomName, roomId, deskConfig, now)
+	room := domain.NewRoom(roomName, roomId, deskConfig)
 
 	err := repo.CreateNewRoom(roomId, room)
 

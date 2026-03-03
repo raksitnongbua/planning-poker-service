@@ -21,9 +21,10 @@ func FindMemberIndex(members []domain.Member, targetId string) int {
 func JoinRoom(id, name, picture, roomId string) (domain.Room, error) {
 	roomInfo := roomService.GetRoomInfo(roomId)
 
-	newMember := domain.NewMember(id, name, picture, timer.GetTimeNow())
+	now := timer.GetTimeNow()
+	newMember := domain.NewMember(id, name, picture, now)
 
-	roomInfo.JoinRoom(newMember, timer.GetTimeNow())
+	roomInfo.JoinRoom(newMember, now)
 
 	err := repo.UpdateNewJoiner(roomInfo.Members, roomInfo.MemberIDs, roomId)
 
@@ -66,7 +67,6 @@ func RevealCards(actorIndex int, roomId string) (domain.Room, error) {
 func ResetRoom(roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)
-	roomInfo.UpdatedAt = now
 
 	roomInfo.Restart(now)
 

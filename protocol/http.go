@@ -36,6 +36,7 @@ func ServeREST() {
 	v1.Get("/guest/sign-in", user.SignInWithGuestHandler)
 	v1.Post("/new-room", room.CreateNewRoomHandler)
 	v1.Get("/room/recent-rooms/:id", room.GetRecentRoomsHandler)
+	v1.Delete("/rooms/expired", room.CleanupExpiredRoomsHandler)
 
 	app.Listen(":8080")
 }

@@ -3,14 +3,17 @@ package room
 import (
 	"context"
 	"log"
+	"fmt"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/common"
-	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/timer"
 	"github.com/raksitnongbua/planning-poker-service/internal/repository"
 )
+
+const roomRetention = 30 * 24 * time.Hour
 
 func QueryRecentRooms(id string) (recentRooms []map[string]interface{}, err error) {
 	query := repository.RoomsColRef.Where("MemberIDs", "array-contains", id).OrderBy("UpdatedAt", firestore.Desc)
@@ -63,19 +66,31 @@ func GetRoomInfo(roomId string) domain.Room {
 
 func UpdateEstimatedValue(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Result", Value: roomInfo.Result}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "Members", Value: roomInfo.Members},
+		{Path: "Result", Value: roomInfo.Result},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+	})
 	return err
 }
 
 func UpdateNewJoiner(members []domain.Member, memberIds []string, roomId string) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: members}, {Path: "MemberIDs", Value: memberIds}, {Path: "UpdatedAt", Value: timer.GetTimeNow()}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "Members", Value: members},
+		{Path: "MemberIDs", Value: memberIds},
+		{Path: "UpdatedAt", Value: time.Now()},
+	})
 	return err
 }
 
 func SetRevealCards(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
-	_, err := docRef.Update(context.Background(), []firestore.Update{{Path: "Members", Value: roomInfo.Members}, {Path: "Status", Value: roomInfo.Status}, {Path: "UpdatedAt", Value: roomInfo.UpdatedAt}})
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "Members", Value: roomInfo.Members},
+		{Path: "Status", Value: roomInfo.Status},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+	})
 	return err
 }
 
@@ -85,6 +100,46 @@ func ResetRoom(roomId string, roomInfo domain.Room) error {
 		{Path: "Status", Value: roomInfo.Status},
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 		{Path: "Members", Value: roomInfo.Members},
-		{Path: "Result", Value: roomInfo.Result}})
+		{Path: "Result", Value: roomInfo.Result},
+	})
 	return err
+}
+
+func DeleteExpiredRooms() (domain.CleanupResult, error) {
+	ctx := context.Background()
+	threshold := time.Now().Add(-roomRetention)
+
+	docs, err := repository.RoomsColRef.Where("UpdatedAt", "<", threshold).Documents(ctx).GetAll()
+	if err != nil {
+		return domain.CleanupResult{}, err
+	}
+
+	var deletedRooms []domain.DeletedRoom
+	for _, doc := range docs {
+		var room domain.Room
+		if err := doc.DataTo(&room); err != nil {
+			return domain.CleanupResult{}, err
+		}
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			return domain.CleanupResult{}, err
+		}
+		deletedRooms = append(deletedRooms, domain.DeletedRoom{
+			ID:        doc.Ref.ID,
+			Name:      room.Name,
+			UpdatedAt: room.UpdatedAt,
+		})
+	}
+
+	count := len(deletedRooms)
+	message := fmt.Sprintf("Successfully deleted %d expired room(s) inactive for more than 30 days", count)
+	if count == 0 {
+		message = "No expired rooms found"
+	}
+
+	return domain.CleanupResult{
+		Message:   message,
+		Deleted:   count,
+		Rooms:     deletedRooms,
+		CleanedAt: time.Now(),
+	}, nil
 }

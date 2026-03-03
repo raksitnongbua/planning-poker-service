@@ -17,8 +17,6 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 	if req.RoomName == "" || req.HostingID == "" || req.DeskConfig == "" {
 		return c.Status(fiber.ErrBadRequest.Code).JSON(fiber.Map{"error": "Missing required fields"})
 	}
-	now := timer.GetTimeNow()
-
 	roomID, err := room.CreateNewRoom(req.RoomName, req.DeskConfig)
 	if err != nil {
 		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{"error": err.Error()})
@@ -26,8 +24,17 @@ func CreateNewRoomHandler(c *fiber.Ctx) error {
 
 	return c.JSON(roomResponse{
 		RoomID:    roomID,
-		CreatedAt: now,
+		CreatedAt: timer.GetTimeNow(),
 	})
+}
+
+func CleanupExpiredRoomsHandler(c *fiber.Ctx) error {
+	result, err := room.CleanupExpiredRooms()
+	if err != nil {
+		return c.Status(fiber.ErrInternalServerError.Code).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(result)
 }
 
 func GetRecentRoomsHandler(c *fiber.Ctx) error {

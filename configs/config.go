@@ -13,10 +13,8 @@ type config struct {
 var Conf config
 
 func Init() {
-	// Load dotenv configuration
-	if err := godotenv.Load(".env"); err != nil {
-		panic(err.Error())
-	}
+	// Load .env if present (local dev). Ignore error in production.
+	_ = godotenv.Load(".env")
 	if err := env.Parse(&Conf); err != nil {
 		panic(err.Error())
 	}
