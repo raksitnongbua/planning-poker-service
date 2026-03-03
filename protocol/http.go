@@ -17,6 +17,8 @@ func ServeREST() {
 	app := fiber.New()
 	app.Use(cors.New())
 	app.Get("/health", health.HealthCheckHandler)
+	app.Static("/openapi.yaml", "./openapi.yaml")
+	app.Get("/docs", docsHandler)
 
 	app.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {

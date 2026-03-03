@@ -1,0 +1,306 @@
+openapi: 3.0.3
+info:
+  title: Planning Poker Service
+  description: Backend API for Corgi Planning Poker — a collaborative estimation tool for agile teams.
+  version: 1.2.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      tags: [Health]
+      responses:
+        "200":
+          description: Service is healthy
+
+  /api/v1/guest/sign-in:
+    get:
+      summary: Sign in as a guest
+      description: Generates a new UUID to identify a guest user session.
+      operationId: guestSignIn
+      tags: [User]
+      responses:
+        "200":
+          description: Guest UUID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuestSignInResponse"
+
+  /api/v1/new-room:
+    post:
+      summary: Create a new room
+      operationId: createRoom
+      tags: [Room]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoomRequest"
+      responses:
+        "200":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateRoomResponse"
+        "400":
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/room/recent-rooms/{id}:
+    get:
+      summary: Get recent rooms for a user
+      description: |
+        Returns rooms the user has joined, ordered by most recently updated.
+        If a valid NextAuth.js session cookie is present, the authenticated user's ID
+        is used instead of the path parameter.
+      operationId: getRecentRooms
+      tags: [Room]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Guest user ID (used as fallback when no session cookie is present)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of recent rooms
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentRoomsResponse"
+        "400":
+          description: Missing user ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid session cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/rooms/expired:
+    delete:
+      summary: Clean up expired rooms
+      description: Deletes all rooms that have been inactive for more than 30 days.
+      operationId: cleanupExpiredRooms
+      tags: [Room]
+      responses:
+        "200":
+          description: Cleanup result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CleanupResult"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    GuestSignInResponse:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    CreateRoomRequest:
+      type: object
+      required: [room_name, hosting_id, desk_config]
+      properties:
+        room_name:
+          type: string
+          example: "Sprint 42 Estimation"
+        hosting_id:
+          type: string
+          description: ID of the user creating the room
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        desk_config:
+          type: string
+          description: Card deck configuration identifier
+          example: "fibonacci"
+
+    CreateRoomResponse:
+      type: object
+      properties:
+        room_id:
+          type: string
+          example: "abc123"
+        created_at:
+          type: string
+          format: date-time
+
+    RecentRoomsResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomSummary"
+
+    RoomSummary:
+      type: object
+      description: Room document with its Firestore document ID included as `id`
+      properties:
+        id:
+          type: string
+          description: Firestore document ID
+          example: "abc123"
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+        status:
+          type: string
+          enum: [VOTING, REVEALED_CARDS]
+        result:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Map of estimated value to vote count
+          example: {"3": 2, "5": 1}
+        desk_config:
+          type: string
+        member_ids:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Member:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        picture:
+          type: string
+          format: uri
+        last_active_at:
+          type: string
+          format: date-time
+        estimated_value:
+          type: string
+          example: "5"
+
+    CleanupResult:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Successfully deleted 3 expired room(s) inactive for more than 30 days"
+        deleted:
+          type: integer
+          example: 3
+        rooms:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeletedRoom"
+        cleaned_at:
+          type: string
+          format: date-time
+
+    DeletedRoom:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Missing required fields"
+
+  # WebSocket is documented below as an info extension since OpenAPI 3.0
+  # does not natively support WebSocket. See x-websocket below.
+
+x-websocket:
+  description: |
+    ## WebSocket: /ws/room/:uid/:id
+
+    Connect to `ws://localhost:8080/ws/room/{uid}/{id}` where:
+    - `uid` — the current user's ID
+    - `id` — the room ID
+
+    All messages are JSON objects with shape: `{ "action": string, "payload": any }`
+
+    ### Server → Client
+
+    | Action | Description |
+    |--------|-------------|
+    | `UPDATE_ROOM` | Broadcast to all room members whenever room state changes. Payload is the full `Room` object. |
+    | `NEED_TO_JOIN` | Sent on connect if the user is not yet a member of the room. |
+
+    ### Client → Server
+
+    #### JOIN_ROOM
+    ```json
+    {
+      "action": "JOIN_ROOM",
+      "payload": { "name": "Alice", "profile": "https://..." }
+    }
+    ```
+
+    #### UPDATE_ESTIMATED_VALUE
+    ```json
+    {
+      "action": "UPDATE_ESTIMATED_VALUE",
+      "payload": { "value": "5" }
+    }
+    ```
+
+    #### REVEAL_CARDS
+    ```json
+    { "action": "REVEAL_CARDS" }
+    ```
+
+    #### RESET_ROOM
+    ```json
+    { "action": "RESET_ROOM" }
+    ```
