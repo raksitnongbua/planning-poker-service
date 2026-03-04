@@ -276,6 +276,7 @@ x-websocket:
     |--------|-------------|
     | `UPDATE_ROOM` | Broadcast to all room members whenever room state changes. Payload is the full `Room` object. |
     | `NEED_TO_JOIN` | Sent on connect if the user is not yet a member of the room. |
+    | `EMOJI_THROWN` | Broadcast to all room members **except the sender** when a throw is fired. |
 
     ### Client → Server
 
@@ -304,3 +305,64 @@ x-websocket:
     ```json
     { "action": "RESET_ROOM" }
     ```
+
+    #### THROW_EMOJI
+    Fire-and-forget. Not persisted. Exactly one of `target_member_id`,
+    `target_table_member_id`, or `target_x_ratio`/`target_y_ratio` should
+    be present; extra fields are passed through verbatim.
+
+    **Targeting a right-panel player card:**
+    ```json
+    {
+      "action": "THROW_EMOJI",
+      "payload": {
+        "emoji": "🚀",
+        "target_member_id": "user-bob123"
+      }
+    }
+    ```
+
+    **Targeting a table seat avatar:**
+    ```json
+    {
+      "action": "THROW_EMOJI",
+      "payload": {
+        "emoji": "🚀",
+        "target_table_member_id": "user-bob123"
+      }
+    }
+    ```
+
+    **Free-aim (empty table area):**
+    ```json
+    {
+      "action": "THROW_EMOJI",
+      "payload": {
+        "emoji": "🚀",
+        "target_x_ratio": 0.45,
+        "target_y_ratio": 0.38
+      }
+    }
+    ```
+
+    The server injects `from_user_id` and broadcasts `EMOJI_THROWN` to all
+    other connections in the same room:
+
+    ```json
+    {
+      "action": "EMOJI_THROWN",
+      "payload": {
+        "from_user_id": "user-abc123",
+        "emoji": "🚀",
+        "target_member_id": "user-bob123"
+      }
+    }
+    ```
+
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `emoji` | `string` | Single emoji character (opaque, no allowlist) |
+    | `target_member_id` | `string` *(optional)* | Right-panel card target. Receiver resolves position from `[data-member-id]` on their own screen. |
+    | `target_table_member_id` | `string` *(optional)* | Table seat avatar target. Resolved the same way as `target_member_id`. |
+    | `target_x_ratio` | `float` 0–1 *(optional)* | Free-aim X as a fraction of the sender's viewport width. |
+    | `target_y_ratio` | `float` 0–1 *(optional)* | Free-aim Y as a fraction of the sender's viewport height. |

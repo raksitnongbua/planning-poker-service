@@ -39,6 +39,23 @@ func broadcastMessage(roomId string, message interface{}) {
 	}
 }
 
+func broadcastToOthers(sender *websocket.Conn, roomId string, message interface{}) {
+	clientsMu.Lock()
+	defer clientsMu.Unlock()
+
+	for client := range clients {
+		if client == sender {
+			continue
+		}
+		if client.Locals("roomId") != roomId {
+			continue
+		}
+		if err := client.WriteJSON(message); err != nil {
+			log.Printf("Error sending message to client: %v", err)
+		}
+	}
+}
+
 func noticeUpdateRoom(roomId string, roomInfo domain.Room) {
 	broadcastMessage(roomId, messageAction{Action: "UPDATE_ROOM", Payload: roomInfo})
 }
@@ -149,6 +166,23 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
+		case "THROW_EMOJI":
+			throwPayload, err := transformPayloadToThrowEmoji(receivedMessage.Payload)
+			if err != nil {
+				log.Printf("THROW_EMOJI invalid payload: %v", err)
+				continue
+			}
+			broadcastToOthers(c, roomId, messageAction{
+				Action: "EMOJI_THROWN",
+				Payload: emojiThrownPayload{
+					FromUserID:          uid,
+					Emoji:               throwPayload.Emoji,
+					TargetMemberID:      throwPayload.TargetMemberID,
+					TargetTableMemberID: throwPayload.TargetTableMemberID,
+					TargetXRatio:        throwPayload.TargetXRatio,
+					TargetYRatio:        throwPayload.TargetYRatio,
+				},
+			})
 		}
 	}
 }
