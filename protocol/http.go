@@ -39,6 +39,7 @@ func ServeREST() {
 	v1.Post("/new-room", room.CreateNewRoomHandler)
 	v1.Get("/room/recent-rooms/:id", room.GetRecentRoomsHandler)
 	v1.Delete("/rooms/expired", room.CleanupExpiredRoomsHandler)
+	v1.Delete("/rooms/:roomId/members/:memberId", room.KickMemberHandler)
 
 	app.Listen(":8080")
 }

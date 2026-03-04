@@ -166,6 +166,14 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
+		case "PING":
+			roomInfo, err := socketService.TouchMember(uid, roomId)
+			if err != nil {
+				log.Printf("PING update failed: %v", err)
+				continue
+			}
+			noticeUpdateRoom(roomId, roomInfo)
+
 		case "THROW_EMOJI":
 			throwPayload, err := transformPayloadToThrowEmoji(receivedMessage.Payload)
 			if err != nil {
@@ -184,6 +192,12 @@ func SocketRoomHandler(c *websocket.Conn) {
 					TargetYRatio:        throwPayload.TargetYRatio,
 				},
 			})
+			roomInfo, err := socketService.TouchMember(uid, roomId)
+			if err != nil {
+				log.Printf("THROW_EMOJI touch member failed: %v", err)
+				continue
+			}
+			noticeUpdateRoom(roomId, roomInfo)
 		}
 	}
 }

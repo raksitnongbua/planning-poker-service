@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Planning Poker Service
   description: Backend API for Corgi Planning Poker — a collaborative estimation tool for agile teams.
-  version: 1.2.0
+  version: 1.3.0
 
 servers:
   - url: http://localhost:8080
@@ -105,6 +105,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/rooms/{roomId}/members/{memberId}:
+    delete:
+      summary: Kick a member from a room
+      description: |
+        Removes the member from the active `members` and `member_ids` lists.
+        Their ID is preserved in `ever_joined_member_ids` so the room continues
+        to appear in their recent-rooms history.
+      operationId: kickMember
+      tags: [Room]
+      parameters:
+        - name: roomId
+          in: path
+          required: true
+          description: Room ID
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          required: true
+          description: ID of the member to kick
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Member kicked — returns updated room state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Room"
+        "400":
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Member not found in room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/rooms/expired:
     delete:
       summary: Clean up expired rooms
@@ -169,14 +220,9 @@ components:
           items:
             $ref: "#/components/schemas/RoomSummary"
 
-    RoomSummary:
+    Room:
       type: object
-      description: Room document with its Firestore document ID included as `id`
       properties:
-        id:
-          type: string
-          description: Firestore document ID
-          example: "abc123"
         name:
           type: string
         members:
@@ -198,12 +244,31 @@ components:
           type: array
           items:
             type: string
+          description: IDs of currently active members
+        ever_joined_member_ids:
+          type: array
+          items:
+            type: string
+          description: |
+            IDs of every user who has ever joined this room, including those who were kicked.
+            Used to query recent-rooms so kicked members can still see the room in their history.
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    RoomSummary:
+      allOf:
+        - $ref: "#/components/schemas/Room"
+        - type: object
+          description: Room document with its Firestore document ID included as `id`
+          properties:
+            id:
+              type: string
+              description: Firestore document ID
+              example: "abc123"
 
     Member:
       type: object
@@ -274,7 +339,7 @@ x-websocket:
 
     | Action | Description |
     |--------|-------------|
-    | `UPDATE_ROOM` | Broadcast to all room members whenever room state changes. Payload is the full `Room` object. |
+    | `UPDATE_ROOM` | Broadcast to all room members whenever room state changes (including `PING` and `THROW_EMOJI`). Payload is the full `Room` object. |
     | `NEED_TO_JOIN` | Sent on connect if the user is not yet a member of the room. |
     | `EMOJI_THROWN` | Broadcast to all room members **except the sender** when a throw is fired. |
 
@@ -306,8 +371,17 @@ x-websocket:
     { "action": "RESET_ROOM" }
     ```
 
+    #### PING
+    Updates the sender's `last_active_at` and the room's `updated_at`, then broadcasts
+    `UPDATE_ROOM` to all members. Use this to signal that the user is still present
+    without changing any voting state. No payload required.
+    ```json
+    { "action": "PING" }
+    ```
+
     #### THROW_EMOJI
-    Fire-and-forget. Not persisted. Exactly one of `target_member_id`,
+    Updates the sender's `last_active_at` and broadcasts `UPDATE_ROOM` to all members
+    in addition to the `EMOJI_THROWN` event. Exactly one of `target_member_id`,
     `target_table_member_id`, or `target_x_ratio`/`target_y_ratio` should
     be present; extra fields are passed through verbatim.
 

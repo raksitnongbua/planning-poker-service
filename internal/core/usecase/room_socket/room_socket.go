@@ -26,7 +26,7 @@ func JoinRoom(id, name, picture, roomId string) (domain.Room, error) {
 
 	roomInfo.JoinRoom(newMember, now)
 
-	err := repo.UpdateNewJoiner(roomInfo.Members, roomInfo.MemberIDs, roomId)
+	err := repo.UpdateNewJoiner(roomId, roomInfo)
 
 	if err != nil {
 		return domain.Room{}, err
@@ -62,6 +62,17 @@ func RevealCards(actorIndex int, roomId string) (domain.Room, error) {
 	}
 
 	return roomInfo, nil
+}
+
+func TouchMember(uid, roomId string) (domain.Room, error) {
+	now := timer.GetTimeNow()
+	roomInfo := roomService.GetRoomInfo(roomId)
+	index := FindMemberIndex(roomInfo.Members, uid)
+	if index == -1 {
+		return roomInfo, nil
+	}
+	roomInfo.TouchMember(index, now)
+	return roomInfo, repo.UpdateLastActive(roomId, roomInfo.Members, roomInfo.UpdatedAt)
 }
 
 func ResetRoom(roomId string) (domain.Room, error) {

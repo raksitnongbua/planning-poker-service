@@ -16,7 +16,7 @@ import (
 const roomRetention = 30 * 24 * time.Hour
 
 func QueryRecentRooms(id string) (recentRooms []map[string]interface{}, err error) {
-	query := repository.RoomsColRef.Where("MemberIDs", "array-contains", id).OrderBy("UpdatedAt", firestore.Desc)
+	query := repository.RoomsColRef.Where("EverJoinedMemberIDs", "array-contains", id).OrderBy("UpdatedAt", firestore.Desc)
 
 	docs, err := query.Documents(context.Background()).GetAll()
 	if err != nil {
@@ -74,12 +74,23 @@ func UpdateEstimatedValue(roomId string, roomInfo domain.Room) error {
 	return err
 }
 
-func UpdateNewJoiner(members []domain.Member, memberIds []string, roomId string) error {
+func UpdateNewJoiner(roomId string, roomInfo domain.Room) error {
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Update(context.Background(), []firestore.Update{
-		{Path: "Members", Value: members},
-		{Path: "MemberIDs", Value: memberIds},
+		{Path: "Members", Value: roomInfo.Members},
+		{Path: "MemberIDs", Value: roomInfo.MemberIDs},
+		{Path: "EverJoinedMemberIDs", Value: roomInfo.EverJoinedMemberIDs},
 		{Path: "UpdatedAt", Value: time.Now()},
+	})
+	return err
+}
+
+func KickMember(roomId string, roomInfo domain.Room) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "Members", Value: roomInfo.Members},
+		{Path: "MemberIDs", Value: roomInfo.MemberIDs},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 	})
 	return err
 }
@@ -101,6 +112,15 @@ func ResetRoom(roomId string, roomInfo domain.Room) error {
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 		{Path: "Members", Value: roomInfo.Members},
 		{Path: "Result", Value: roomInfo.Result},
+	})
+	return err
+}
+
+func UpdateLastActive(roomId string, members []domain.Member, updatedAt time.Time) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "Members", Value: members},
+		{Path: "UpdatedAt", Value: updatedAt},
 	})
 	return err
 }
