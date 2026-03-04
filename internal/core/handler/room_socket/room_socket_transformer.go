@@ -26,6 +26,26 @@ func transformPayloadToEstimatedPoint(payload interface{}) (data estimatedPointP
 	return updatePointData, nil
 }
 
+func transformPayloadToThrowEmoji(payload interface{}) (data throwEmojiPayload, err error) {
+	p, ok := payload.(map[string]interface{})
+	if !ok {
+		return throwEmojiPayload{}, fmt.Errorf("Invalid payload format for THROW_EMOJI action")
+	}
+
+	var throwData throwEmojiPayload
+	payloadBytes, err := json.Marshal(p)
+	if err != nil {
+		return throwEmojiPayload{}, fmt.Errorf("Error marshaling payload: %d", err)
+	}
+
+	err = json.Unmarshal(payloadBytes, &throwData)
+	if err != nil {
+		return throwEmojiPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
+	}
+
+	return throwData, nil
+}
+
 func transformPayloadToJoinRoom(payload interface{}) (data joinRoomPayload, err error) {
 	payload, ok := payload.(map[string]interface{})
 	if !ok {
