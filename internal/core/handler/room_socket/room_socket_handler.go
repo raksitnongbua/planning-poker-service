@@ -179,6 +179,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 					Emoji:               throwPayload.Emoji,
 					TargetMemberID:      throwPayload.TargetMemberID,
 					TargetTableMemberID: throwPayload.TargetTableMemberID,
+					TargetPanelMemberID: throwPayload.TargetPanelMemberID,
 					TargetXRatio:        throwPayload.TargetXRatio,
 					TargetYRatio:        throwPayload.TargetYRatio,
 				},

@@ -364,5 +364,6 @@ x-websocket:
     | `emoji` | `string` | Single emoji character (opaque, no allowlist) |
     | `target_member_id` | `string` *(optional)* | Right-panel card target. Receiver resolves position from `[data-member-id]` on their own screen. |
     | `target_table_member_id` | `string` *(optional)* | Table seat avatar target. Resolved the same way as `target_member_id`. |
+    | `target_panel_member_id` | `string` *(optional)* | Panel member target. Resolved the same way as `target_member_id`. |
     | `target_x_ratio` | `float` 0–1 *(optional)* | Free-aim X as a fraction of the sender's viewport width. |
     | `target_y_ratio` | `float` 0–1 *(optional)* | Free-aim Y as a fraction of the sender's viewport height. |
