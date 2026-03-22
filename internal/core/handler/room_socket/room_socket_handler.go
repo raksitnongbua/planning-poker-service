@@ -180,29 +180,30 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
-		case "SET_JIRA_ISSUE":
-			jiraPayload, err := transformPayloadToSetJiraIssue(receivedMessage.Payload)
+		case "SET_TICKET_ESTIMATION":
+			ticketPayload, err := transformPayloadToSetTicketEstimation(receivedMessage.Payload)
 			if err != nil {
-				logger.Error("SET_JIRA_ISSUE invalid payload", "roomId", roomId, "uid", uid, "error", err)
+				logger.Error("SET_TICKET_ESTIMATION invalid payload", "roomId", roomId, "uid", uid, "error", err)
 				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 				continue
 			}
-			var issue *domain.JiraIssue
-			if jiraPayload.JiraIssue != nil {
-				issue = &domain.JiraIssue{
-					ID:               jiraPayload.JiraIssue.ID,
-					Key:              jiraPayload.JiraIssue.Key,
-					Summary:          jiraPayload.JiraIssue.Summary,
-					Type:             jiraPayload.JiraIssue.Type,
-					CloudID:          jiraPayload.JiraIssue.CloudID,
-					StoryPointsField: jiraPayload.JiraIssue.StoryPointsField,
-					URL:              jiraPayload.JiraIssue.URL,
+			var est *domain.TicketEstimation
+			if ticketPayload.TicketEstimation != nil {
+				est = &domain.TicketEstimation{
+					Name:             ticketPayload.TicketEstimation.Name,
+					Source:           ticketPayload.TicketEstimation.Source,
+					JiraKey:          ticketPayload.TicketEstimation.JiraKey,
+					JiraIssueID:      ticketPayload.TicketEstimation.JiraIssueID,
+					JiraCloudID:      ticketPayload.TicketEstimation.JiraCloudID,
+					JiraURL:          ticketPayload.TicketEstimation.JiraURL,
+					JiraType:         ticketPayload.TicketEstimation.JiraType,
+					StoryPointsField: ticketPayload.TicketEstimation.StoryPointsField,
 				}
 			}
-			roomInfo, err := socketService.SetJiraIssue(issue, roomId)
+			roomInfo, err := socketService.SetTicketEstimation(est, roomId)
 			if err != nil {
-				logger.Error("SET_JIRA_ISSUE failed", "roomId", roomId, "uid", uid, "error", err)
-				c.WriteJSON(fiber.Map{"error": "SET_JIRA_ISSUE_FAILED"})
+				logger.Error("SET_TICKET_ESTIMATION failed", "roomId", roomId, "uid", uid, "error", err)
+				c.WriteJSON(fiber.Map{"error": "SET_TICKET_ESTIMATION_FAILED"})
 				continue
 			}
 			noticeUpdateRoom(roomId, roomInfo)

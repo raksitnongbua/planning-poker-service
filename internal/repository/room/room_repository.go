@@ -117,6 +117,7 @@ func ResetRoom(roomId string, roomInfo domain.Room) error {
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 		{Path: "Members", Value: roomInfo.Members},
 		{Path: "Result", Value: roomInfo.Result},
+		{Path: "TicketEstimation", Value: firestore.Delete},
 	})
 	return err
 }
@@ -130,17 +131,17 @@ func UpdateLastActive(roomId string, members []domain.Member, updatedAt time.Tim
 	return err
 }
 
-func SetJiraIssue(roomId string, roomInfo domain.Room) error {
-	logger.Info("firestore set jira issue", "roomId", roomId)
+func SetTicketEstimation(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore set ticket estimation", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
-	var jiraIssueValue interface{}
-	if roomInfo.CurrentJiraIssue != nil {
-		jiraIssueValue = roomInfo.CurrentJiraIssue
+	var ticketValue interface{}
+	if roomInfo.TicketEstimation != nil {
+		ticketValue = roomInfo.TicketEstimation
 	} else {
-		jiraIssueValue = firestore.Delete
+		ticketValue = firestore.Delete
 	}
 	_, err := docRef.Update(context.Background(), []firestore.Update{
-		{Path: "CurrentJiraIssue", Value: jiraIssueValue},
+		{Path: "TicketEstimation", Value: ticketValue},
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 	})
 	return err
