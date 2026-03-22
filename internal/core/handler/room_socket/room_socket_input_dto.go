@@ -8,6 +8,21 @@ type estimatedPointPayload struct {
 	Value string `json:"value"`
 }
 
+type setTicketEstimationPayload struct {
+	TicketEstimation *ticketEstimationDTO `json:"ticketEstimation"`
+}
+
+type ticketEstimationDTO struct {
+	Name             string `json:"name"`
+	Source           string `json:"source"`
+	JiraKey          string `json:"jiraKey"`
+	JiraIssueID      string `json:"jiraIssueId"`
+	JiraCloudID      string `json:"jiraCloudId"`
+	JiraURL          string `json:"jiraUrl"`
+	JiraType         string `json:"jiraType"`
+	StoryPointsField string `json:"storyPointsField"`
+}
+
 type throwEmojiPayload struct {
 	Emoji                string   `json:"emoji"`
 	TargetMemberID       *string  `json:"target_member_id,omitempty"`

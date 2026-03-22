@@ -2,16 +2,28 @@ package domain
 
 import "time"
 
+type TicketEstimation struct {
+	Name             string `json:"name" firestore:"name"`
+	Source           string `json:"source" firestore:"source"`
+	JiraKey          string `json:"jiraKey" firestore:"jiraKey"`
+	JiraIssueID      string `json:"jiraIssueId" firestore:"jiraIssueId"`
+	JiraCloudID      string `json:"jiraCloudId" firestore:"jiraCloudId"`
+	JiraURL          string `json:"jiraUrl" firestore:"jiraUrl"`
+	JiraType         string `json:"jiraType" firestore:"jiraType"`
+	StoryPointsField string `json:"storyPointsField" firestore:"storyPointsField"`
+}
+
 type Room struct {
-	Name                string         `json:"name"`
-	Members             []Member       `json:"members"`
-	Status              string         `json:"status"`
+	Name                string      `json:"name"`
+	Members             []Member    `json:"members"`
+	Status              string      `json:"status"`
 	Result              map[string]int `json:"result"`
-	CreatedAt           time.Time      `json:"created_at"`
-	UpdatedAt           time.Time      `json:"updated_at"`
-	MemberIDs           []string       `json:"member_ids"`
-	EverJoinedMemberIDs []string       `json:"ever_joined_member_ids"`
-	DeskConfig          string         `json:"desk_config"`
+	CreatedAt           time.Time   `json:"created_at"`
+	UpdatedAt           time.Time   `json:"updated_at"`
+	MemberIDs           []string    `json:"member_ids"`
+	EverJoinedMemberIDs []string    `json:"ever_joined_member_ids"`
+	DeskConfig          string      `json:"desk_config"`
+	TicketEstimation    *TicketEstimation `json:"ticket_estimation" firestore:"TicketEstimation"`
 }
 
 func NewRoom(name, roomId, deskConfig string) *Room {
@@ -112,10 +124,16 @@ func (r *Room) Restart(updatedAt time.Time) {
 	r.Status = "VOTING"
 	r.UpdatedAt = updatedAt
 	r.Result = map[string]int{}
+	r.TicketEstimation = nil
 
 	for i := range r.Members {
 		r.Members[i].EstimatedValue = ""
 	}
+}
+
+func (r *Room) SetTicketEstimation(est *TicketEstimation, updatedAt time.Time) {
+	r.TicketEstimation = est
+	r.UpdatedAt = updatedAt
 }
 
 type DeletedRoom struct {

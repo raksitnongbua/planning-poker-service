@@ -8,6 +8,7 @@ import (
 type config struct {
 	FirebaseCredentials string `env:"FIREBASE_CREDENTIALS,required"`
 	AuthSecret          string `env:"NEXTAUTH_SECRET,required"`
+	AppEnv              string `env:"APP_ENV" envDefault:"production"`
 }
 
 var Conf config
