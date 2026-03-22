@@ -2,8 +2,8 @@ package room
 
 import (
 	"context"
-	"log"
 	"fmt"
+	"log"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/raksitnongbua/planning-poker-service/internal/core/usecase/common"
 	"github.com/raksitnongbua/planning-poker-service/internal/repository"
+	"github.com/raksitnongbua/planning-poker-service/pkg/logger"
 )
 
 const roomRetention = 30 * 24 * time.Hour
@@ -40,6 +41,7 @@ func QueryRecentRooms(id string) (recentRooms []map[string]interface{}, err erro
 }
 
 func CreateNewRoom(roomId string, room *domain.Room) error {
+	logger.Info("firestore create room", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Set(context.Background(), room)
 	return err
@@ -75,6 +77,7 @@ func UpdateEstimatedValue(roomId string, roomInfo domain.Room) error {
 }
 
 func UpdateNewJoiner(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore update new joiner", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Members", Value: roomInfo.Members},
@@ -96,6 +99,7 @@ func KickMember(roomId string, roomInfo domain.Room) error {
 }
 
 func SetRevealCards(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore reveal cards", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Members", Value: roomInfo.Members},
@@ -106,6 +110,7 @@ func SetRevealCards(roomId string, roomInfo domain.Room) error {
 }
 
 func ResetRoom(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore reset room", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
 	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Status", Value: roomInfo.Status},
@@ -126,6 +131,7 @@ func UpdateLastActive(roomId string, members []domain.Member, updatedAt time.Tim
 }
 
 func SetJiraIssue(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore set jira issue", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
 	var jiraIssueValue interface{}
 	if roomInfo.CurrentJiraIssue != nil {

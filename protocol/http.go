@@ -7,10 +7,12 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 
+	"github.com/raksitnongbua/planning-poker-service/configs"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/handler/health"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/handler/room"
 	roomsocket "github.com/raksitnongbua/planning-poker-service/internal/core/handler/room_socket"
 	"github.com/raksitnongbua/planning-poker-service/internal/core/handler/user"
+	"github.com/raksitnongbua/planning-poker-service/pkg/logger"
 )
 
 func ServeREST() {
@@ -41,5 +43,6 @@ func ServeREST() {
 	v1.Delete("/rooms/expired", room.CleanupExpiredRoomsHandler)
 	v1.Delete("/rooms/:roomId/members/:memberId", room.KickMemberHandler)
 
+	logger.Info("server starting", "port", "8080", "env", configs.Conf.AppEnv)
 	app.Listen(":8080")
 }

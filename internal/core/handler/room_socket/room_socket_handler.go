@@ -2,7 +2,6 @@ package roomsocket
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 
 	"github.com/gofiber/contrib/websocket"
@@ -10,6 +9,7 @@ import (
 	"github.com/raksitnongbua/planning-poker-service/internal/core/domain"
 	roomService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room"
 	socketService "github.com/raksitnongbua/planning-poker-service/internal/core/usecase/room_socket"
+	"github.com/raksitnongbua/planning-poker-service/pkg/logger"
 )
 
 type messageAction struct {
@@ -34,7 +34,7 @@ func broadcastMessage(roomId string, message interface{}) {
 
 		err := client.WriteJSON(message)
 		if err != nil {
-			log.Printf("Error sending message to client: %v", err)
+			logger.Error("error sending message to client", "error", err)
 		}
 	}
 }
@@ -51,7 +51,7 @@ func broadcastToOthers(sender *websocket.Conn, roomId string, message interface{
 			continue
 		}
 		if err := client.WriteJSON(message); err != nil {
-			log.Printf("Error sending message to client: %v", err)
+			logger.Error("error sending message to client", "error", err)
 		}
 	}
 }
@@ -65,7 +65,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 
 	if !roomService.IsRoomExists(roomId) {
 		c.WriteJSON(fiber.Map{"error": "Room not found"})
-		log.Printf("Room with ID %s not found", roomId)
+		logger.Error("room not found", "roomId", roomId)
 		c.Close()
 		return
 	}
@@ -74,15 +74,17 @@ func SocketRoomHandler(c *websocket.Conn) {
 	clients[c] = true
 	clientsMu.Unlock()
 
+	uid := c.Params("uid")
+	logger.Info("ws client connected", "roomId", roomId, "uid", uid)
+
 	defer func() {
 		clientsMu.Lock()
 		delete(clients, c)
 		clientsMu.Unlock()
 
+		logger.Info("ws client disconnected", "roomId", roomId, "uid", uid)
 		_ = c.Close()
 	}()
-
-	uid := c.Params("uid")
 	c.Locals("roomId", roomId)
 
 	roomInfo := roomService.GetRoomInfo(roomId)
@@ -98,14 +100,16 @@ func SocketRoomHandler(c *websocket.Conn) {
 	)
 	for {
 		if _, msg, err = c.ReadMessage(); err != nil {
-			log.Println("read:", err)
+			logger.Error("ws read error", "roomId", roomId, "uid", uid, "error", err)
 			break
 		}
 		var receivedMessage messageAction
 		if err := json.Unmarshal(msg, &receivedMessage); err != nil {
-			log.Println("json unmarshal:", err)
+			logger.Error("ws unmarshal error", "roomId", roomId, "uid", uid, "error", err)
 			break
 		}
+
+		logger.Info("ws action received", "action", receivedMessage.Action, "roomId", roomId, "uid", uid)
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
@@ -116,7 +120,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			roomInfo, err := socketService.JoinRoom(uid, joinRoomPayload.Name, joinRoomPayload.Profile, roomId)
 			if err != nil {
-				log.Printf(err.Error())
+				logger.Error("JOIN_ROOM failed", "roomId", roomId, "uid", uid, "error", err)
 				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
 				return
 			}
@@ -134,7 +138,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 				roomInfo, err := socketService.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
 
 				if err != nil {
-					log.Printf(err.Error())
+					logger.Error("UPDATE_ESTIMATED_VALUE failed", "roomId", roomId, "uid", uid, "error", err)
 					c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
 					return
 				}
@@ -149,6 +153,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			if index != -1 {
 				roomInfo, err := socketService.RevealCards(index, roomId)
 				if err != nil {
+					logger.Error("REVEAL_CARDS failed", "roomId", roomId, "uid", uid, "error", err)
 					c.WriteJSON(fiber.Map{"error": "REVEAL_CARDS_FAILED"})
 					return
 				}
@@ -161,6 +166,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "RESET_ROOM":
 			roomInfo, err := socketService.ResetRoom(roomId)
 			if err != nil {
+				logger.Error("RESET_ROOM failed", "roomId", roomId, "error", err)
 				c.WriteJSON(fiber.Map{"error": "RESET_ROOM_FAILED"})
 				return
 			}
@@ -169,7 +175,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "PING":
 			roomInfo, err := socketService.TouchMember(uid, roomId)
 			if err != nil {
-				log.Printf("PING update failed: %v", err)
+				logger.Error("PING update failed", "roomId", roomId, "uid", uid, "error", err)
 				continue
 			}
 			noticeUpdateRoom(roomId, roomInfo)
@@ -177,7 +183,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "SET_JIRA_ISSUE":
 			jiraPayload, err := transformPayloadToSetJiraIssue(receivedMessage.Payload)
 			if err != nil {
-				log.Printf("SET_JIRA_ISSUE invalid payload: %v", err)
+				logger.Error("SET_JIRA_ISSUE invalid payload", "roomId", roomId, "uid", uid, "error", err)
 				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
 				continue
 			}
@@ -195,7 +201,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			roomInfo, err := socketService.SetJiraIssue(issue, roomId)
 			if err != nil {
-				log.Printf("SET_JIRA_ISSUE failed: %v", err)
+				logger.Error("SET_JIRA_ISSUE failed", "roomId", roomId, "uid", uid, "error", err)
 				c.WriteJSON(fiber.Map{"error": "SET_JIRA_ISSUE_FAILED"})
 				continue
 			}
@@ -204,7 +210,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "THROW_EMOJI":
 			throwPayload, err := transformPayloadToThrowEmoji(receivedMessage.Payload)
 			if err != nil {
-				log.Printf("THROW_EMOJI invalid payload: %v", err)
+				logger.Error("THROW_EMOJI invalid payload", "roomId", roomId, "uid", uid, "error", err)
 				continue
 			}
 			broadcastToOthers(c, roomId, messageAction{
@@ -221,7 +227,7 @@ func SocketRoomHandler(c *websocket.Conn) {
 			})
 			roomInfo, err := socketService.TouchMember(uid, roomId)
 			if err != nil {
-				log.Printf("THROW_EMOJI touch member failed: %v", err)
+				logger.Error("THROW_EMOJI touch member failed", "roomId", roomId, "uid", uid, "error", err)
 				continue
 			}
 			noticeUpdateRoom(roomId, roomInfo)
