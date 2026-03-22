@@ -2,16 +2,27 @@ package domain
 
 import "time"
 
+type JiraIssue struct {
+	ID               string `json:"id" firestore:"id"`
+	Key              string `json:"key" firestore:"key"`
+	Summary          string `json:"summary" firestore:"summary"`
+	Type             string `json:"type" firestore:"type"`
+	CloudID          string `json:"cloudId" firestore:"cloudId"`
+	StoryPointsField string `json:"storyPointsField" firestore:"storyPointsField"`
+	URL              string `json:"url" firestore:"url"`
+}
+
 type Room struct {
-	Name                string         `json:"name"`
-	Members             []Member       `json:"members"`
-	Status              string         `json:"status"`
+	Name                string      `json:"name"`
+	Members             []Member    `json:"members"`
+	Status              string      `json:"status"`
 	Result              map[string]int `json:"result"`
-	CreatedAt           time.Time      `json:"created_at"`
-	UpdatedAt           time.Time      `json:"updated_at"`
-	MemberIDs           []string       `json:"member_ids"`
-	EverJoinedMemberIDs []string       `json:"ever_joined_member_ids"`
-	DeskConfig          string         `json:"desk_config"`
+	CreatedAt           time.Time   `json:"created_at"`
+	UpdatedAt           time.Time   `json:"updated_at"`
+	MemberIDs           []string    `json:"member_ids"`
+	EverJoinedMemberIDs []string    `json:"ever_joined_member_ids"`
+	DeskConfig          string      `json:"desk_config"`
+	CurrentJiraIssue    *JiraIssue  `json:"current_jira_issue" firestore:"CurrentJiraIssue"`
 }
 
 func NewRoom(name, roomId, deskConfig string) *Room {
@@ -116,6 +127,11 @@ func (r *Room) Restart(updatedAt time.Time) {
 	for i := range r.Members {
 		r.Members[i].EstimatedValue = ""
 	}
+}
+
+func (r *Room) SetJiraIssue(issue *JiraIssue, updatedAt time.Time) {
+	r.CurrentJiraIssue = issue
+	r.UpdatedAt = updatedAt
 }
 
 type DeletedRoom struct {

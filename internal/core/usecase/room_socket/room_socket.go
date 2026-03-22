@@ -75,6 +75,17 @@ func TouchMember(uid, roomId string) (domain.Room, error) {
 	return roomInfo, repo.UpdateLastActive(roomId, roomInfo.Members, roomInfo.UpdatedAt)
 }
 
+func SetJiraIssue(issue *domain.JiraIssue, roomId string) (domain.Room, error) {
+	now := timer.GetTimeNow()
+	roomInfo := roomService.GetRoomInfo(roomId)
+	roomInfo.SetJiraIssue(issue, now)
+	err := repo.SetJiraIssue(roomId, roomInfo)
+	if err != nil {
+		return domain.Room{}, err
+	}
+	return roomInfo, nil
+}
+
 func ResetRoom(roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)

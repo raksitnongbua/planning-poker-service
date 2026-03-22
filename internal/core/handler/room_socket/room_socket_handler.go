@@ -174,6 +174,33 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
+		case "SET_JIRA_ISSUE":
+			jiraPayload, err := transformPayloadToSetJiraIssue(receivedMessage.Payload)
+			if err != nil {
+				log.Printf("SET_JIRA_ISSUE invalid payload: %v", err)
+				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+				continue
+			}
+			var issue *domain.JiraIssue
+			if jiraPayload.JiraIssue != nil {
+				issue = &domain.JiraIssue{
+					ID:               jiraPayload.JiraIssue.ID,
+					Key:              jiraPayload.JiraIssue.Key,
+					Summary:          jiraPayload.JiraIssue.Summary,
+					Type:             jiraPayload.JiraIssue.Type,
+					CloudID:          jiraPayload.JiraIssue.CloudID,
+					StoryPointsField: jiraPayload.JiraIssue.StoryPointsField,
+					URL:              jiraPayload.JiraIssue.URL,
+				}
+			}
+			roomInfo, err := socketService.SetJiraIssue(issue, roomId)
+			if err != nil {
+				log.Printf("SET_JIRA_ISSUE failed: %v", err)
+				c.WriteJSON(fiber.Map{"error": "SET_JIRA_ISSUE_FAILED"})
+				continue
+			}
+			noticeUpdateRoom(roomId, roomInfo)
+
 		case "THROW_EMOJI":
 			throwPayload, err := transformPayloadToThrowEmoji(receivedMessage.Payload)
 			if err != nil {

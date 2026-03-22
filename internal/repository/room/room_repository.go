@@ -125,6 +125,21 @@ func UpdateLastActive(roomId string, members []domain.Member, updatedAt time.Tim
 	return err
 }
 
+func SetJiraIssue(roomId string, roomInfo domain.Room) error {
+	docRef := repository.RoomsColRef.Doc(roomId)
+	var jiraIssueValue interface{}
+	if roomInfo.CurrentJiraIssue != nil {
+		jiraIssueValue = roomInfo.CurrentJiraIssue
+	} else {
+		jiraIssueValue = firestore.Delete
+	}
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "CurrentJiraIssue", Value: jiraIssueValue},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+	})
+	return err
+}
+
 func DeleteExpiredRooms() (domain.CleanupResult, error) {
 	ctx := context.Background()
 	threshold := time.Now().Add(-roomRetention)
