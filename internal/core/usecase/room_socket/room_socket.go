@@ -86,6 +86,18 @@ func SetTicketEstimation(est *domain.TicketEstimation, roomId string) (domain.Ro
 	return roomInfo, nil
 }
 
+func SetFinalStoryPoint(roomId string, value string) (domain.Room, error) {
+	now := timer.GetTimeNow()
+	roomInfo := roomService.GetRoomInfo(roomId)
+	roomInfo.FinalStoryPoint = value
+	roomInfo.UpdatedAt = now
+	err := repo.SetFinalStoryPoint(roomId, value, now)
+	if err != nil {
+		return domain.Room{}, err
+	}
+	return roomInfo, nil
+}
+
 func ResetRoom(roomId string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)

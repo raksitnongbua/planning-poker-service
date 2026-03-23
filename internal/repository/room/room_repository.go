@@ -118,6 +118,17 @@ func ResetRoom(roomId string, roomInfo domain.Room) error {
 		{Path: "Members", Value: roomInfo.Members},
 		{Path: "Result", Value: roomInfo.Result},
 		{Path: "TicketEstimation", Value: firestore.Delete},
+		{Path: "FinalStoryPoint", Value: ""},
+	})
+	return err
+}
+
+func SetFinalStoryPoint(roomId string, value string, updatedAt time.Time) error {
+	logger.Info("firestore set final story point", "roomId", roomId, "value", value)
+	docRef := repository.RoomsColRef.Doc(roomId)
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "FinalStoryPoint", Value: value},
+		{Path: "UpdatedAt", Value: updatedAt},
 	})
 	return err
 }

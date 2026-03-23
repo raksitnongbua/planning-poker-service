@@ -208,7 +208,22 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
-		case "THROW_EMOJI":
+		case "SET_FINAL_STORY_POINT":
+		finalPointPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
+		if err != nil {
+			logger.Error("SET_FINAL_STORY_POINT invalid payload", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+			continue
+		}
+		roomInfo, err := socketService.SetFinalStoryPoint(roomId, finalPointPayload.Value)
+		if err != nil {
+			logger.Error("SET_FINAL_STORY_POINT failed", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "SET_FINAL_STORY_POINT_FAILED"})
+			continue
+		}
+		noticeUpdateRoom(roomId, roomInfo)
+
+	case "THROW_EMOJI":
 			throwPayload, err := transformPayloadToThrowEmoji(receivedMessage.Payload)
 			if err != nil {
 				logger.Error("THROW_EMOJI invalid payload", "roomId", roomId, "uid", uid, "error", err)
