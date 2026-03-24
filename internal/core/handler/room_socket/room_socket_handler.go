@@ -242,6 +242,51 @@ func SocketRoomHandler(c *websocket.Conn) {
 		}
 		noticeUpdateRoom(roomId, roomInfo)
 
+	case "SET_TICKET_QUEUE_WITH_ESTIMATION":
+		payload, err := transformPayloadToSetTicketQueueWithEstimation(receivedMessage.Payload)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE_WITH_ESTIMATION invalid payload", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+			continue
+		}
+		var queue []domain.TicketEstimation
+		for _, t := range payload.TicketQueue {
+			queue = append(queue, domain.TicketEstimation{
+				Name:             t.Name,
+				Source:           t.Source,
+				JiraKey:          t.JiraKey,
+				JiraIssueID:      t.JiraIssueID,
+				JiraCloudID:      t.JiraCloudID,
+				JiraURL:          t.JiraURL,
+				JiraType:         t.JiraType,
+				StoryPointsField: t.StoryPointsField,
+				AvgScore:         t.AvgScore,
+				FinalScore:       t.FinalScore,
+			})
+		}
+		var est *domain.TicketEstimation
+		if payload.TicketEstimation != nil {
+			est = &domain.TicketEstimation{
+				Name:             payload.TicketEstimation.Name,
+				Source:           payload.TicketEstimation.Source,
+				JiraKey:          payload.TicketEstimation.JiraKey,
+				JiraIssueID:      payload.TicketEstimation.JiraIssueID,
+				JiraCloudID:      payload.TicketEstimation.JiraCloudID,
+				JiraURL:          payload.TicketEstimation.JiraURL,
+				JiraType:         payload.TicketEstimation.JiraType,
+				StoryPointsField: payload.TicketEstimation.StoryPointsField,
+				AvgScore:         payload.TicketEstimation.AvgScore,
+				FinalScore:       payload.TicketEstimation.FinalScore,
+			}
+		}
+		roomInfo, err = socketService.SetTicketQueueWithEstimation(queue, est, roomId)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE_WITH_ESTIMATION failed", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "SET_TICKET_QUEUE_WITH_ESTIMATION_FAILED"})
+			continue
+		}
+		noticeUpdateRoom(roomId, roomInfo)
+
 	case "SET_FINAL_STORY_POINT":
 		finalPointPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
 		if err != nil {

@@ -29,6 +29,11 @@ type setTicketQueuePayload struct {
 	TicketQueue []ticketEstimationDTO `json:"ticketQueue"`
 }
 
+type setTicketQueueWithEstimationPayload struct {
+	TicketQueue      []ticketEstimationDTO `json:"ticketQueue"`
+	TicketEstimation *ticketEstimationDTO  `json:"ticketEstimation"`
+}
+
 type throwEmojiPayload struct {
 	Emoji                string   `json:"emoji"`
 	TargetMemberID       *string  `json:"target_member_id,omitempty"`

@@ -86,6 +86,26 @@ func transformPayloadToSetTicketQueue(payload interface{}) (data setTicketQueueP
 	return result, nil
 }
 
+func transformPayloadToSetTicketQueueWithEstimation(payload interface{}) (data setTicketQueueWithEstimationPayload, err error) {
+	p, ok := payload.(map[string]interface{})
+	if !ok {
+		return setTicketQueueWithEstimationPayload{}, fmt.Errorf("Invalid payload format for SET_TICKET_QUEUE_WITH_ESTIMATION action")
+	}
+
+	var result setTicketQueueWithEstimationPayload
+	payloadBytes, err := json.Marshal(p)
+	if err != nil {
+		return setTicketQueueWithEstimationPayload{}, fmt.Errorf("Error marshaling payload: %v", err)
+	}
+
+	err = json.Unmarshal(payloadBytes, &result)
+	if err != nil {
+		return setTicketQueueWithEstimationPayload{}, fmt.Errorf("Error unmarshal payload: %v", err)
+	}
+
+	return result, nil
+}
+
 func transformPayloadToJoinRoom(payload interface{}) (data joinRoomPayload, err error) {
 	payload, ok := payload.(map[string]interface{})
 	if !ok {
