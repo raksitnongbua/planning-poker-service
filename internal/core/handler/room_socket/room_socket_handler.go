@@ -109,7 +109,9 @@ func SocketRoomHandler(c *websocket.Conn) {
 			break
 		}
 
-		logger.Info("ws action received", "action", receivedMessage.Action, "roomId", roomId, "uid", uid)
+		if receivedMessage.Action != "PING" {
+			logger.Info("ws action received", "action", receivedMessage.Action, "roomId", roomId, "uid", uid)
+		}
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
@@ -198,6 +200,8 @@ func SocketRoomHandler(c *websocket.Conn) {
 					JiraURL:          ticketPayload.TicketEstimation.JiraURL,
 					JiraType:         ticketPayload.TicketEstimation.JiraType,
 					StoryPointsField: ticketPayload.TicketEstimation.StoryPointsField,
+					AvgScore:         ticketPayload.TicketEstimation.AvgScore,
+					FinalScore:       ticketPayload.TicketEstimation.FinalScore,
 				}
 			}
 			roomInfo, err := socketService.SetTicketEstimation(est, roomId)
@@ -208,7 +212,37 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
-		case "SET_FINAL_STORY_POINT":
+		case "SET_TICKET_QUEUE":
+		queuePayload, err := transformPayloadToSetTicketQueue(receivedMessage.Payload)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE invalid payload", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+			continue
+		}
+		var queue []domain.TicketEstimation
+		for _, t := range queuePayload.TicketQueue {
+			queue = append(queue, domain.TicketEstimation{
+				Name:             t.Name,
+				Source:           t.Source,
+				JiraKey:          t.JiraKey,
+				JiraIssueID:      t.JiraIssueID,
+				JiraCloudID:      t.JiraCloudID,
+				JiraURL:          t.JiraURL,
+				JiraType:         t.JiraType,
+				StoryPointsField: t.StoryPointsField,
+				AvgScore:         t.AvgScore,
+				FinalScore:       t.FinalScore,
+			})
+		}
+		roomInfo, err := socketService.SetTicketQueue(queue, roomId)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE failed", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "SET_TICKET_QUEUE_FAILED"})
+			continue
+		}
+		noticeUpdateRoom(roomId, roomInfo)
+
+	case "SET_FINAL_STORY_POINT":
 		finalPointPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
 		if err != nil {
 			logger.Error("SET_FINAL_STORY_POINT invalid payload", "roomId", roomId, "uid", uid, "error", err)

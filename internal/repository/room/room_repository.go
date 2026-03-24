@@ -158,6 +158,29 @@ func SetTicketEstimation(roomId string, roomInfo domain.Room) error {
 	return err
 }
 
+func SetTicketQueue(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore set ticket queue", "roomId", roomId)
+	docRef := repository.RoomsColRef.Doc(roomId)
+	var queueValue interface{}
+	if len(roomInfo.TicketQueue) > 0 {
+		queueValue = roomInfo.TicketQueue
+	} else {
+		queueValue = firestore.Delete
+	}
+	var ticketValue interface{}
+	if roomInfo.TicketEstimation != nil {
+		ticketValue = roomInfo.TicketEstimation
+	} else {
+		ticketValue = firestore.Delete
+	}
+	_, err := docRef.Update(context.Background(), []firestore.Update{
+		{Path: "TicketQueue", Value: queueValue},
+		{Path: "TicketEstimation", Value: ticketValue},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+	})
+	return err
+}
+
 func DeleteExpiredRooms() (domain.CleanupResult, error) {
 	ctx := context.Background()
 	threshold := time.Now().Add(-roomRetention)

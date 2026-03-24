@@ -3,14 +3,16 @@ package domain
 import "time"
 
 type TicketEstimation struct {
-	Name             string `json:"name" firestore:"name"`
-	Source           string `json:"source" firestore:"source"`
-	JiraKey          string `json:"jiraKey" firestore:"jiraKey"`
-	JiraIssueID      string `json:"jiraIssueId" firestore:"jiraIssueId"`
-	JiraCloudID      string `json:"jiraCloudId" firestore:"jiraCloudId"`
-	JiraURL          string `json:"jiraUrl" firestore:"jiraUrl"`
-	JiraType         string `json:"jiraType" firestore:"jiraType"`
-	StoryPointsField string `json:"storyPointsField" firestore:"storyPointsField"`
+	Name             string  `json:"name" firestore:"name"`
+	Source           string  `json:"source" firestore:"source"`
+	JiraKey          string  `json:"jiraKey" firestore:"jiraKey"`
+	JiraIssueID      string  `json:"jiraIssueId" firestore:"jiraIssueId"`
+	JiraCloudID      string  `json:"jiraCloudId" firestore:"jiraCloudId"`
+	JiraURL          string  `json:"jiraUrl" firestore:"jiraUrl"`
+	JiraType         string  `json:"jiraType" firestore:"jiraType"`
+	StoryPointsField string  `json:"storyPointsField" firestore:"storyPointsField"`
+	AvgScore         float64 `json:"avgScore,omitempty" firestore:"avgScore"`
+	FinalScore       string  `json:"finalScore,omitempty" firestore:"finalScore"`
 }
 
 type Room struct {
@@ -23,8 +25,9 @@ type Room struct {
 	MemberIDs           []string          `json:"member_ids"`
 	EverJoinedMemberIDs []string          `json:"ever_joined_member_ids"`
 	DeskConfig          string            `json:"desk_config"`
-	TicketEstimation    *TicketEstimation `json:"ticket_estimation" firestore:"TicketEstimation"`
-	FinalStoryPoint     string            `json:"final_story_point" firestore:"FinalStoryPoint"`
+	TicketEstimation    *TicketEstimation  `json:"ticket_estimation" firestore:"TicketEstimation"`
+	TicketQueue         []TicketEstimation `json:"ticket_queue" firestore:"TicketQueue"`
+	FinalStoryPoint     string             `json:"final_story_point" firestore:"FinalStoryPoint"`
 }
 
 func NewRoom(name, roomId, deskConfig string) *Room {
@@ -125,16 +128,56 @@ func (r *Room) Restart(updatedAt time.Time) {
 	r.Status = "VOTING"
 	r.UpdatedAt = updatedAt
 	r.Result = map[string]int{}
-	r.TicketEstimation = nil
 	r.FinalStoryPoint = ""
 
 	for i := range r.Members {
 		r.Members[i].EstimatedValue = ""
 	}
+
+	// Auto-select the first unvoted ticket from the queue
+	r.TicketEstimation = nil
+	for _, t := range r.TicketQueue {
+		if t.AvgScore == 0 && t.FinalScore == "" {
+			ticket := t
+			r.TicketEstimation = &ticket
+			break
+		}
+	}
 }
 
 func (r *Room) SetTicketEstimation(est *TicketEstimation, updatedAt time.Time) {
 	r.TicketEstimation = est
+	r.UpdatedAt = updatedAt
+}
+
+func (r *Room) SetTicketQueue(queue []TicketEstimation, updatedAt time.Time) {
+	r.TicketQueue = queue
+	if len(queue) == 0 {
+		r.TicketEstimation = nil
+	} else if r.TicketEstimation == nil {
+		// No active ticket yet — set first in queue
+		r.TicketEstimation = &queue[0]
+	} else {
+		// Keep active ticket if it's still in the new queue; otherwise set first
+		activeKey := r.TicketEstimation.JiraKey
+		if activeKey == "" {
+			activeKey = r.TicketEstimation.Name
+		}
+		found := false
+		for _, t := range queue {
+			ticketKey := t.JiraKey
+			if ticketKey == "" {
+				ticketKey = t.Name
+			}
+			if ticketKey == activeKey {
+				found = true
+				break
+			}
+		}
+		if !found {
+			r.TicketEstimation = &queue[0]
+		}
+	}
 	r.UpdatedAt = updatedAt
 }
 

@@ -13,14 +13,20 @@ type setTicketEstimationPayload struct {
 }
 
 type ticketEstimationDTO struct {
-	Name             string `json:"name"`
-	Source           string `json:"source"`
-	JiraKey          string `json:"jiraKey"`
-	JiraIssueID      string `json:"jiraIssueId"`
-	JiraCloudID      string `json:"jiraCloudId"`
-	JiraURL          string `json:"jiraUrl"`
-	JiraType         string `json:"jiraType"`
-	StoryPointsField string `json:"storyPointsField"`
+	Name             string  `json:"name"`
+	Source           string  `json:"source"`
+	JiraKey          string  `json:"jiraKey"`
+	JiraIssueID      string  `json:"jiraIssueId"`
+	JiraCloudID      string  `json:"jiraCloudId"`
+	JiraURL          string  `json:"jiraUrl"`
+	JiraType         string  `json:"jiraType"`
+	StoryPointsField string  `json:"storyPointsField"`
+	AvgScore         float64 `json:"avgScore,omitempty"`
+	FinalScore       string  `json:"finalScore,omitempty"`
+}
+
+type setTicketQueuePayload struct {
+	TicketQueue []ticketEstimationDTO `json:"ticketQueue"`
 }
 
 type throwEmojiPayload struct {
