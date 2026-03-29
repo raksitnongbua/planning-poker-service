@@ -109,7 +109,9 @@ func SocketRoomHandler(c *websocket.Conn) {
 			break
 		}
 
-		logger.Info("ws action received", "action", receivedMessage.Action, "roomId", roomId, "uid", uid)
+		if receivedMessage.Action != "PING" {
+			logger.Info("ws action received", "action", receivedMessage.Action, "roomId", roomId, "uid", uid)
+		}
 
 		switch receivedMessage.Action {
 		case "JOIN_ROOM":
@@ -163,11 +165,44 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 
-		case "RESET_ROOM":
-			roomInfo, err := socketService.ResetRoom(roomId)
+		case "NEXT_ROUND":
+			nextPayload := transformPayloadToNextRound(receivedMessage.Payload)
+			var roomInfo domain.Room
+			if nextPayload.TicketEstimation != nil {
+				ticket := domain.TicketEstimation{
+					Name:             nextPayload.TicketEstimation.Name,
+					Source:           nextPayload.TicketEstimation.Source,
+					JiraKey:          nextPayload.TicketEstimation.JiraKey,
+					JiraIssueID:      nextPayload.TicketEstimation.JiraIssueID,
+					JiraCloudID:      nextPayload.TicketEstimation.JiraCloudID,
+					JiraURL:          nextPayload.TicketEstimation.JiraURL,
+					JiraType:         nextPayload.TicketEstimation.JiraType,
+					StoryPointsField: nextPayload.TicketEstimation.StoryPointsField,
+					AvgScore:         nextPayload.TicketEstimation.AvgScore,
+					FinalScore:       nextPayload.TicketEstimation.FinalScore,
+				}
+				var queue []domain.TicketEstimation
+				for _, t := range nextPayload.TicketQueue {
+					queue = append(queue, domain.TicketEstimation{
+						Name:             t.Name,
+						Source:           t.Source,
+						JiraKey:          t.JiraKey,
+						JiraIssueID:      t.JiraIssueID,
+						JiraCloudID:      t.JiraCloudID,
+						JiraURL:          t.JiraURL,
+						JiraType:         t.JiraType,
+						StoryPointsField: t.StoryPointsField,
+						AvgScore:         t.AvgScore,
+						FinalScore:       t.FinalScore,
+					})
+				}
+				roomInfo, err = socketService.ResetRoomWithTicket(roomId, ticket, queue)
+			} else {
+				roomInfo, err = socketService.ResetRoom(roomId)
+			}
 			if err != nil {
-				logger.Error("RESET_ROOM failed", "roomId", roomId, "error", err)
-				c.WriteJSON(fiber.Map{"error": "RESET_ROOM_FAILED"})
+				logger.Error("NEXT_ROUND failed", "roomId", roomId, "error", err)
+				c.WriteJSON(fiber.Map{"error": "NEXT_ROUND_FAILED"})
 				return
 			}
 			noticeUpdateRoom(roomId, roomInfo)
@@ -198,6 +233,8 @@ func SocketRoomHandler(c *websocket.Conn) {
 					JiraURL:          ticketPayload.TicketEstimation.JiraURL,
 					JiraType:         ticketPayload.TicketEstimation.JiraType,
 					StoryPointsField: ticketPayload.TicketEstimation.StoryPointsField,
+					AvgScore:         ticketPayload.TicketEstimation.AvgScore,
+					FinalScore:       ticketPayload.TicketEstimation.FinalScore,
 				}
 			}
 			roomInfo, err := socketService.SetTicketEstimation(est, roomId)
@@ -208,7 +245,82 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
-		case "SET_FINAL_STORY_POINT":
+		case "SET_TICKET_QUEUE":
+		queuePayload, err := transformPayloadToSetTicketQueue(receivedMessage.Payload)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE invalid payload", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+			continue
+		}
+		var queue []domain.TicketEstimation
+		for _, t := range queuePayload.TicketQueue {
+			queue = append(queue, domain.TicketEstimation{
+				Name:             t.Name,
+				Source:           t.Source,
+				JiraKey:          t.JiraKey,
+				JiraIssueID:      t.JiraIssueID,
+				JiraCloudID:      t.JiraCloudID,
+				JiraURL:          t.JiraURL,
+				JiraType:         t.JiraType,
+				StoryPointsField: t.StoryPointsField,
+				AvgScore:         t.AvgScore,
+				FinalScore:       t.FinalScore,
+			})
+		}
+		roomInfo, err := socketService.SetTicketQueue(queue, roomId)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE failed", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "SET_TICKET_QUEUE_FAILED"})
+			continue
+		}
+		noticeUpdateRoom(roomId, roomInfo)
+
+	case "SET_TICKET_QUEUE_WITH_ESTIMATION":
+		payload, err := transformPayloadToSetTicketQueueWithEstimation(receivedMessage.Payload)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE_WITH_ESTIMATION invalid payload", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
+			continue
+		}
+		var queue []domain.TicketEstimation
+		for _, t := range payload.TicketQueue {
+			queue = append(queue, domain.TicketEstimation{
+				Name:             t.Name,
+				Source:           t.Source,
+				JiraKey:          t.JiraKey,
+				JiraIssueID:      t.JiraIssueID,
+				JiraCloudID:      t.JiraCloudID,
+				JiraURL:          t.JiraURL,
+				JiraType:         t.JiraType,
+				StoryPointsField: t.StoryPointsField,
+				AvgScore:         t.AvgScore,
+				FinalScore:       t.FinalScore,
+			})
+		}
+		var est *domain.TicketEstimation
+		if payload.TicketEstimation != nil {
+			est = &domain.TicketEstimation{
+				Name:             payload.TicketEstimation.Name,
+				Source:           payload.TicketEstimation.Source,
+				JiraKey:          payload.TicketEstimation.JiraKey,
+				JiraIssueID:      payload.TicketEstimation.JiraIssueID,
+				JiraCloudID:      payload.TicketEstimation.JiraCloudID,
+				JiraURL:          payload.TicketEstimation.JiraURL,
+				JiraType:         payload.TicketEstimation.JiraType,
+				StoryPointsField: payload.TicketEstimation.StoryPointsField,
+				AvgScore:         payload.TicketEstimation.AvgScore,
+				FinalScore:       payload.TicketEstimation.FinalScore,
+			}
+		}
+		roomInfo, err = socketService.SetTicketQueueWithEstimation(queue, est, roomId)
+		if err != nil {
+			logger.Error("SET_TICKET_QUEUE_WITH_ESTIMATION failed", "roomId", roomId, "uid", uid, "error", err)
+			c.WriteJSON(fiber.Map{"error": "SET_TICKET_QUEUE_WITH_ESTIMATION_FAILED"})
+			continue
+		}
+		noticeUpdateRoom(roomId, roomInfo)
+
+	case "SET_FINAL_STORY_POINT":
 		finalPointPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
 		if err != nil {
 			logger.Error("SET_FINAL_STORY_POINT invalid payload", "roomId", roomId, "uid", uid, "error", err)
