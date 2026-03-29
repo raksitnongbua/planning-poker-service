@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"math"
+	"strconv"
+	"strings"
+	"time"
+)
 
 type TicketEstimation struct {
 	Name             string  `json:"name" firestore:"name"`
@@ -117,6 +122,101 @@ func (r *Room) RevealCards(actorIndex int, updatedAt time.Time) {
 	r.Status = "REVEALED_CARDS"
 	r.UpdatedAt = updatedAt
 	r.Members[actorIndex].LastActiveAt = updatedAt
+	r.stampTicketScoresOnReveal()
+}
+
+func (r *Room) stampTicketScoresOnReveal() {
+	if r.TicketEstimation == nil {
+		return
+	}
+	avg := r.computeAvgFromVotes()
+	autoFinal := nearestDeckOption(r.DeskConfig, avg)
+
+	r.TicketEstimation.AvgScore = avg
+	if autoFinal != "" {
+		r.TicketEstimation.FinalScore = autoFinal
+		r.FinalStoryPoint = autoFinal
+	}
+
+	estKey := r.TicketEstimation.JiraKey
+	if estKey == "" {
+		estKey = r.TicketEstimation.Name
+	}
+	for i, t := range r.TicketQueue {
+		key := t.JiraKey
+		if key == "" {
+			key = t.Name
+		}
+		if key == estKey {
+			r.TicketQueue[i].AvgScore = avg
+			if autoFinal != "" {
+				r.TicketQueue[i].FinalScore = autoFinal
+			}
+			break
+		}
+	}
+}
+
+func (r *Room) ConfirmFinalStoryPoint(value string, updatedAt time.Time) {
+	r.FinalStoryPoint = value
+	r.UpdatedAt = updatedAt
+	if r.TicketEstimation == nil {
+		return
+	}
+	avg := r.computeAvgFromVotes()
+	r.TicketEstimation.FinalScore = value
+	r.TicketEstimation.AvgScore = avg
+
+	estKey := r.TicketEstimation.JiraKey
+	if estKey == "" {
+		estKey = r.TicketEstimation.Name
+	}
+	for i, t := range r.TicketQueue {
+		key := t.JiraKey
+		if key == "" {
+			key = t.Name
+		}
+		if key == estKey {
+			r.TicketQueue[i].FinalScore = value
+			r.TicketQueue[i].AvgScore = avg
+			break
+		}
+	}
+}
+
+func (r *Room) computeAvgFromVotes() float64 {
+	var sum float64
+	var count int
+	for _, m := range r.Members {
+		v, err := strconv.ParseFloat(m.EstimatedValue, 64)
+		if err == nil {
+			sum += v
+			count++
+		}
+	}
+	if count == 0 {
+		return 0
+	}
+	return math.Round((sum/float64(count))*10) / 10
+}
+
+func nearestDeckOption(deskConfig string, avg float64) string {
+	opts := strings.Split(deskConfig, ",")
+	nearest := ""
+	minDist := math.MaxFloat64
+	for _, opt := range opts {
+		opt = strings.TrimSpace(opt)
+		v, err := strconv.ParseFloat(opt, 64)
+		if err != nil {
+			continue
+		}
+		dist := math.Abs(v - avg)
+		if dist < minDist {
+			minDist = dist
+			nearest = opt
+		}
+	}
+	return nearest
 }
 
 func (r *Room) TouchMember(index int, updatedAt time.Time) {
@@ -143,6 +243,17 @@ func (r *Room) Restart(updatedAt time.Time) {
 			break
 		}
 	}
+}
+
+// RestartWithTicket resets the room and explicitly sets the active ticket,
+// optionally replacing the queue. Use when the user re-votes a specific ticket
+// rather than taking the auto-selected next one.
+func (r *Room) RestartWithTicket(ticket TicketEstimation, queue []TicketEstimation, updatedAt time.Time) {
+	if len(queue) > 0 {
+		r.TicketQueue = queue
+	}
+	r.Restart(updatedAt)
+	r.TicketEstimation = &ticket
 }
 
 func (r *Room) SetTicketEstimation(est *TicketEstimation, updatedAt time.Time) {

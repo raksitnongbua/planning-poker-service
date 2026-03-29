@@ -101,10 +101,27 @@ func KickMember(roomId string, roomInfo domain.Room) error {
 func SetRevealCards(roomId string, roomInfo domain.Room) error {
 	logger.Info("firestore reveal cards", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
+
+	var ticketValue interface{}
+	if roomInfo.TicketEstimation != nil {
+		ticketValue = roomInfo.TicketEstimation
+	} else {
+		ticketValue = firestore.Delete
+	}
+	var queueValue interface{}
+	if len(roomInfo.TicketQueue) > 0 {
+		queueValue = roomInfo.TicketQueue
+	} else {
+		queueValue = firestore.Delete
+	}
+
 	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Members", Value: roomInfo.Members},
 		{Path: "Status", Value: roomInfo.Status},
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+		{Path: "FinalStoryPoint", Value: roomInfo.FinalStoryPoint},
+		{Path: "TicketEstimation", Value: ticketValue},
+		{Path: "TicketQueue", Value: queueValue},
 	})
 	return err
 }
@@ -112,23 +129,54 @@ func SetRevealCards(roomId string, roomInfo domain.Room) error {
 func ResetRoom(roomId string, roomInfo domain.Room) error {
 	logger.Info("firestore reset room", "roomId", roomId)
 	docRef := repository.RoomsColRef.Doc(roomId)
+
+	var ticketValue interface{}
+	if roomInfo.TicketEstimation != nil {
+		ticketValue = roomInfo.TicketEstimation
+	} else {
+		ticketValue = firestore.Delete
+	}
+	var queueValue interface{}
+	if len(roomInfo.TicketQueue) > 0 {
+		queueValue = roomInfo.TicketQueue
+	} else {
+		queueValue = firestore.Delete
+	}
+
 	_, err := docRef.Update(context.Background(), []firestore.Update{
 		{Path: "Status", Value: roomInfo.Status},
 		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
 		{Path: "Members", Value: roomInfo.Members},
 		{Path: "Result", Value: roomInfo.Result},
-		{Path: "TicketEstimation", Value: firestore.Delete},
+		{Path: "TicketEstimation", Value: ticketValue},
+		{Path: "TicketQueue", Value: queueValue},
 		{Path: "FinalStoryPoint", Value: ""},
 	})
 	return err
 }
 
-func SetFinalStoryPoint(roomId string, value string, updatedAt time.Time) error {
-	logger.Info("firestore set final story point", "roomId", roomId, "value", value)
+func SetFinalStoryPoint(roomId string, roomInfo domain.Room) error {
+	logger.Info("firestore set final story point", "roomId", roomId, "value", roomInfo.FinalStoryPoint)
 	docRef := repository.RoomsColRef.Doc(roomId)
+
+	var ticketValue interface{}
+	if roomInfo.TicketEstimation != nil {
+		ticketValue = roomInfo.TicketEstimation
+	} else {
+		ticketValue = firestore.Delete
+	}
+	var queueValue interface{}
+	if len(roomInfo.TicketQueue) > 0 {
+		queueValue = roomInfo.TicketQueue
+	} else {
+		queueValue = firestore.Delete
+	}
+
 	_, err := docRef.Update(context.Background(), []firestore.Update{
-		{Path: "FinalStoryPoint", Value: value},
-		{Path: "UpdatedAt", Value: updatedAt},
+		{Path: "FinalStoryPoint", Value: roomInfo.FinalStoryPoint},
+		{Path: "UpdatedAt", Value: roomInfo.UpdatedAt},
+		{Path: "TicketEstimation", Value: ticketValue},
+		{Path: "TicketQueue", Value: queueValue},
 	})
 	return err
 }

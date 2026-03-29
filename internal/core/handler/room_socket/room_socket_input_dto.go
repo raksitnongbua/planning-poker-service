@@ -34,6 +34,13 @@ type setTicketQueueWithEstimationPayload struct {
 	TicketEstimation *ticketEstimationDTO  `json:"ticketEstimation"`
 }
 
+// nextRoundPayload is optional — when provided, explicit ticket/queue overrides
+// Restart()'s auto-selection (used for re-voting a specific ticket).
+type nextRoundPayload struct {
+	TicketEstimation *ticketEstimationDTO  `json:"ticketEstimation"`
+	TicketQueue      []ticketEstimationDTO `json:"ticketQueue"`
+}
+
 type throwEmojiPayload struct {
 	Emoji                string   `json:"emoji"`
 	TargetMemberID       *string  `json:"target_member_id,omitempty"`

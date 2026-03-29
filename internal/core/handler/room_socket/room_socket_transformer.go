@@ -106,6 +106,27 @@ func transformPayloadToSetTicketQueueWithEstimation(payload interface{}) (data s
 	return result, nil
 }
 
+// transformPayloadToNextRound parses the optional NEXT_ROUND payload.
+// Returns zero-value (nil ticket, empty queue) when payload is absent.
+func transformPayloadToNextRound(payload interface{}) nextRoundPayload {
+	if payload == nil {
+		return nextRoundPayload{}
+	}
+	p, ok := payload.(map[string]interface{})
+	if !ok {
+		return nextRoundPayload{}
+	}
+	var result nextRoundPayload
+	payloadBytes, err := json.Marshal(p)
+	if err != nil {
+		return nextRoundPayload{}
+	}
+	if err := json.Unmarshal(payloadBytes, &result); err != nil {
+		return nextRoundPayload{}
+	}
+	return result
+}
+
 func transformPayloadToJoinRoom(payload interface{}) (data joinRoomPayload, err error) {
 	payload, ok := payload.(map[string]interface{})
 	if !ok {

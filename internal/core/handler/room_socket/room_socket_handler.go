@@ -165,11 +165,44 @@ func SocketRoomHandler(c *websocket.Conn) {
 				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 
-		case "RESET_ROOM":
-			roomInfo, err := socketService.ResetRoom(roomId)
+		case "NEXT_ROUND":
+			nextPayload := transformPayloadToNextRound(receivedMessage.Payload)
+			var roomInfo domain.Room
+			if nextPayload.TicketEstimation != nil {
+				ticket := domain.TicketEstimation{
+					Name:             nextPayload.TicketEstimation.Name,
+					Source:           nextPayload.TicketEstimation.Source,
+					JiraKey:          nextPayload.TicketEstimation.JiraKey,
+					JiraIssueID:      nextPayload.TicketEstimation.JiraIssueID,
+					JiraCloudID:      nextPayload.TicketEstimation.JiraCloudID,
+					JiraURL:          nextPayload.TicketEstimation.JiraURL,
+					JiraType:         nextPayload.TicketEstimation.JiraType,
+					StoryPointsField: nextPayload.TicketEstimation.StoryPointsField,
+					AvgScore:         nextPayload.TicketEstimation.AvgScore,
+					FinalScore:       nextPayload.TicketEstimation.FinalScore,
+				}
+				var queue []domain.TicketEstimation
+				for _, t := range nextPayload.TicketQueue {
+					queue = append(queue, domain.TicketEstimation{
+						Name:             t.Name,
+						Source:           t.Source,
+						JiraKey:          t.JiraKey,
+						JiraIssueID:      t.JiraIssueID,
+						JiraCloudID:      t.JiraCloudID,
+						JiraURL:          t.JiraURL,
+						JiraType:         t.JiraType,
+						StoryPointsField: t.StoryPointsField,
+						AvgScore:         t.AvgScore,
+						FinalScore:       t.FinalScore,
+					})
+				}
+				roomInfo, err = socketService.ResetRoomWithTicket(roomId, ticket, queue)
+			} else {
+				roomInfo, err = socketService.ResetRoom(roomId)
+			}
 			if err != nil {
-				logger.Error("RESET_ROOM failed", "roomId", roomId, "error", err)
-				c.WriteJSON(fiber.Map{"error": "RESET_ROOM_FAILED"})
+				logger.Error("NEXT_ROUND failed", "roomId", roomId, "error", err)
+				c.WriteJSON(fiber.Map{"error": "NEXT_ROUND_FAILED"})
 				return
 			}
 			noticeUpdateRoom(roomId, roomInfo)

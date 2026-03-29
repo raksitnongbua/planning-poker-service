@@ -112,9 +112,8 @@ func SetTicketQueueWithEstimation(queue []domain.TicketEstimation, est *domain.T
 func SetFinalStoryPoint(roomId string, value string) (domain.Room, error) {
 	now := timer.GetTimeNow()
 	roomInfo := roomService.GetRoomInfo(roomId)
-	roomInfo.FinalStoryPoint = value
-	roomInfo.UpdatedAt = now
-	err := repo.SetFinalStoryPoint(roomId, value, now)
+	roomInfo.ConfirmFinalStoryPoint(value, now)
+	err := repo.SetFinalStoryPoint(roomId, roomInfo)
 	if err != nil {
 		return domain.Room{}, err
 	}
@@ -126,6 +125,19 @@ func ResetRoom(roomId string) (domain.Room, error) {
 	roomInfo := roomService.GetRoomInfo(roomId)
 
 	roomInfo.Restart(now)
+
+	err := repo.ResetRoom(roomId, roomInfo)
+	if err != nil {
+		return domain.Room{}, err
+	}
+	return roomInfo, nil
+}
+
+func ResetRoomWithTicket(roomId string, ticket domain.TicketEstimation, queue []domain.TicketEstimation) (domain.Room, error) {
+	now := timer.GetTimeNow()
+	roomInfo := roomService.GetRoomInfo(roomId)
+
+	roomInfo.RestartWithTicket(ticket, queue, now)
 
 	err := repo.ResetRoom(roomId, roomInfo)
 	if err != nil {
