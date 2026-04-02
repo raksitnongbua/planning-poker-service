@@ -20,4 +20,7 @@ func Init() {
 	if err := env.Parse(&Conf); err != nil {
 		panic(err.Error())
 	}
+	if Conf.AllowedOrigins == "" {
+		Conf.AllowedOrigins = "http://localhost:3000"
+	}
 }
