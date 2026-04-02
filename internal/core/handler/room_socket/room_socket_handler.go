@@ -124,8 +124,12 @@ func SocketRoomHandler(c *websocket.Conn) {
 	)
 	for {
 		if _, msg, err = c.ReadMessage(); err != nil {
-			logger.Error("ws read error", "roomId", roomId, "uid", uid, "error", err)
-			break // Network error - connection broken, must disconnect
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
+				logger.Error("ws read error", "roomId", roomId, "uid", uid, "error", err)
+			} else {
+				logger.Info("ws client closed connection", "roomId", roomId, "uid", uid)
+			}
+			break
 		}
 		var receivedMessage messageAction
 		if err := json.Unmarshal(msg, &receivedMessage); err != nil {
