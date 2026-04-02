@@ -61,6 +61,15 @@ func noticeUpdateRoom(roomId string, roomInfo domain.Room) {
 }
 
 func SocketRoomHandler(c *websocket.Conn) {
+	// Panic recovery middleware (security: prevent server crash from malformed messages)
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("panic in WebSocket handler", "panic", r)
+			_ = c.WriteJSON(fiber.Map{"error": "INTERNAL_ERROR"})
+			_ = c.Close()
+		}
+	}()
+
 	roomId := c.Params("id")
 
 	if !roomService.IsRoomExists(roomId) {
@@ -70,11 +79,27 @@ func SocketRoomHandler(c *websocket.Conn) {
 		return
 	}
 
+	// Phase 1: Try cookie auth first, fallback to URL param (security: monitoring)
+	// Phase 2 will reject connections without cookie auth after metrics confirm it works
+	var uid string
+	authenticatedUID, ok := c.Locals("authenticated_uid").(string)
+	if ok && authenticatedUID != "" {
+		// Cookie auth successful - use authenticated UID
+		uid = authenticatedUID
+		logger.Info("using cookie-authenticated uid", "roomId", roomId, "uid", uid)
+	} else {
+		// Fallback to URL param (temporary for Phase 1)
+		uid = c.Params("uid")
+		logger.Warn("using url param uid (cookie auth failed)", "roomId", roomId, "uid", uid)
+	}
+
+	// Set roomId in Locals before adding to clients map (security: fix race condition)
+	c.Locals("roomId", roomId)
+
 	clientsMu.Lock()
 	clients[c] = true
 	clientsMu.Unlock()
 
-	uid := c.Params("uid")
 	logger.Info("ws client connected", "roomId", roomId, "uid", uid)
 
 	defer func() {
@@ -85,7 +110,6 @@ func SocketRoomHandler(c *websocket.Conn) {
 		logger.Info("ws client disconnected", "roomId", roomId, "uid", uid)
 		_ = c.Close()
 	}()
-	c.Locals("roomId", roomId)
 
 	roomInfo := roomService.GetRoomInfo(roomId)
 
@@ -101,12 +125,13 @@ func SocketRoomHandler(c *websocket.Conn) {
 	for {
 		if _, msg, err = c.ReadMessage(); err != nil {
 			logger.Error("ws read error", "roomId", roomId, "uid", uid, "error", err)
-			break
+			break // Network error - connection broken, must disconnect
 		}
 		var receivedMessage messageAction
 		if err := json.Unmarshal(msg, &receivedMessage); err != nil {
 			logger.Error("ws unmarshal error", "roomId", roomId, "uid", uid, "error", err)
-			break
+			_ = c.WriteJSON(fiber.Map{"error": "INVALID_MESSAGE_FORMAT"})
+			continue // Recoverable error - keep connection alive
 		}
 
 		if receivedMessage.Action != "PING" {
@@ -117,14 +142,14 @@ func SocketRoomHandler(c *websocket.Conn) {
 		case "JOIN_ROOM":
 			joinRoomPayload, err := transformPayloadToJoinRoom(receivedMessage.Payload)
 			if err != nil {
-				c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
-				return
+				_ = c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD", "details": err.Error()})
+				continue // Validation error - keep connection alive
 			}
 			roomInfo, err := socketService.JoinRoom(uid, joinRoomPayload.Name, joinRoomPayload.Profile, roomId)
 			if err != nil {
 				logger.Error("JOIN_ROOM failed", "roomId", roomId, "uid", uid, "error", err)
-				c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
-				return
+				_ = c.WriteJSON(fiber.Map{"error": "JOIN_ROOM_FAILED"})
+				continue // Service error - keep connection alive
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 
@@ -134,20 +159,20 @@ func SocketRoomHandler(c *websocket.Conn) {
 			if index != -1 {
 				estimatedPayload, err := transformPayloadToEstimatedPoint(receivedMessage.Payload)
 				if err != nil {
-					c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD"})
-					return
+					_ = c.WriteJSON(fiber.Map{"error": "INVALID_PAYLOAD", "details": err.Error()})
+					continue // Validation error - keep connection alive
 				}
 				roomInfo, err := socketService.UpdateEstimatedValue(index, estimatedPayload.Value, roomId)
 
 				if err != nil {
 					logger.Error("UPDATE_ESTIMATED_VALUE failed", "roomId", roomId, "uid", uid, "error", err)
-					c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
-					return
+					_ = c.WriteJSON(fiber.Map{"error": "UPDATE_ESTIMATED_VALUE_FAILED"})
+					continue // Service error - keep connection alive
 				}
 				noticeUpdateRoom(roomId, roomInfo)
 
 			} else {
-				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+				_ = c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 		case "REVEAL_CARDS":
 			roomInfo = roomService.GetRoomInfo(roomId)
@@ -156,13 +181,13 @@ func SocketRoomHandler(c *websocket.Conn) {
 				roomInfo, err := socketService.RevealCards(index, roomId)
 				if err != nil {
 					logger.Error("REVEAL_CARDS failed", "roomId", roomId, "uid", uid, "error", err)
-					c.WriteJSON(fiber.Map{"error": "REVEAL_CARDS_FAILED"})
-					return
+					_ = c.WriteJSON(fiber.Map{"error": "REVEAL_CARDS_FAILED"})
+					continue // Service error - keep connection alive
 				}
 
 				noticeUpdateRoom(roomId, roomInfo)
 			} else {
-				c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
+				_ = c.WriteJSON(fiber.Map{"error": "NOT_FOUND_USER"})
 			}
 
 		case "NEXT_ROUND":
@@ -202,8 +227,8 @@ func SocketRoomHandler(c *websocket.Conn) {
 			}
 			if err != nil {
 				logger.Error("NEXT_ROUND failed", "roomId", roomId, "error", err)
-				c.WriteJSON(fiber.Map{"error": "NEXT_ROUND_FAILED"})
-				return
+				_ = c.WriteJSON(fiber.Map{"error": "NEXT_ROUND_FAILED"})
+				continue // Service error - keep connection alive
 			}
 			noticeUpdateRoom(roomId, roomInfo)
 

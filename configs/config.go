@@ -9,6 +9,7 @@ type config struct {
 	FirebaseCredentials string `env:"FIREBASE_CREDENTIALS,required"`
 	AuthSecret          string `env:"NEXTAUTH_SECRET,required"`
 	AppEnv              string `env:"APP_ENV" envDefault:"production"`
+	AllowedOrigins      string `env:"ALLOWED_ORIGINS" envDefault:"http://localhost:3000"`
 }
 
 var Conf config
