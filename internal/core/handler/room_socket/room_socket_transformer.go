@@ -144,5 +144,13 @@ func transformPayloadToJoinRoom(payload interface{}) (data joinRoomPayload, err 
 		return joinRoomPayload{}, fmt.Errorf("Error unmarshal payload: %d", err)
 	}
 
+	// Input validation (security: prevent resource exhaustion and XSS)
+	if len(joinRoomData.Name) == 0 || len(joinRoomData.Name) > 100 {
+		return joinRoomPayload{}, fmt.Errorf("name must be 1-100 characters")
+	}
+	if len(joinRoomData.Profile) > 500 {
+		return joinRoomPayload{}, fmt.Errorf("profile URL too long (max 500)")
+	}
+
 	return joinRoomData, nil
 }

@@ -1,7 +1,8 @@
 package idgenerator
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"strings"
 	"time"
 
@@ -17,12 +18,16 @@ func GenerateUniqueRoomID() string {
 
 func generateRandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	runes := []rune(charset)
-	b := make([]rune, length)
-	for i := range b {
-		b[i] = runes[rand.Intn(len(runes))]
+	result := make([]byte, length)
+	for i := range result {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			// Critical: UUID generation must not fail. Panic to prevent insecure fallback.
+			panic("crypto/rand failure: " + err.Error())
+		}
+		result[i] = charset[num.Int64()]
 	}
-	return string(b)
+	return string(result)
 }
 
 func GenerateUUID() string {
